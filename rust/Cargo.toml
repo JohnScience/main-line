@@ -1,0 +1,7 @@
+[workspace]
+members = ["backend"]
+resolver = "3"
+
+[workspace.dependencies]
+tokio = { version = "1.47.1", features = ["full"] }
+axum = { version = "0.8.4" }

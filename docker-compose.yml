@@ -1,0 +1,31 @@
+version: "3.8"
+
+services:
+  db:
+    image: "postgres:17-alpine"
+    ports:
+      - 5432:5432
+    environment:
+      POSTGRES_USER: tester
+      POSTGRES_PASSWORD: tester
+      POSTGRES_DB: tester
+    volumes:
+      - ./dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: ./rust
+      dockerfile: Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://tester:tester@db:5432/tester
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
