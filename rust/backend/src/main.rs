@@ -1,20 +1,29 @@
-use axum::{Router, routing::get};
+use tracing::info;
+
+pub(crate) mod context;
+pub(crate) mod db;
+
+mod requests;
 
 #[tokio::main]
-async fn main() {
-    // build our application with a single route
-    let app = Router::new().route(
-        "/health-check",
-        get(|| async {
-            r#"
-        {
-            "status": "ok"
-        }
-        "#
-        }),
-    );
+async fn main() -> anyhow::Result<()> {
+    tracing_subscriber::fmt::init();
 
-    // run our app with hyper, listening globally on port 3000
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    info!("Starting main-line backend...");
+
+    let app = requests::make_router();
+
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
+    let context = context::Context {
+        env: context::env::Env::from_env()?,
+    };
+    let db = db::Db::new(&context.env.pg).await?;
+
+    db.test().await?;
+
+    info!("Serving the app...");
+
+    axum::serve(listener, app).await?;
+
+    Ok(())
 }
