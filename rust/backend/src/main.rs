@@ -2,6 +2,7 @@ use tracing::info;
 
 pub(crate) mod context;
 pub(crate) mod db;
+pub(crate) mod middleware;
 
 mod requests;
 

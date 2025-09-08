@@ -1,6 +1,6 @@
 use axum::Router;
 
-mod user;
+pub(crate) mod user;
 
 fn api_routes<S>() -> Router<S>
 where

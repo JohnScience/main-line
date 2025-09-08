@@ -29,6 +29,7 @@ services:
       <<: *database-env
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
+      RUST_LOG: "backend=trace"
     ports:
       - "3000:3000"
     restart: unless-stopped
