@@ -30,6 +30,10 @@ services:
     build:
       context: ./
       dockerfile: Dockerfile.backend
+      # The docs (https://docs.docker.com/compose/how-tos/dependent-images/#use-another-services-image-as-the-base-image) state it should work
+      # but it doesn't
+      # additional_contexts:
+      #  rust-workspace: "service:rust-workspace"
     depends_on:
       db:
         condition: service_healthy
