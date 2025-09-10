@@ -8,7 +8,7 @@ pub(crate) mod id;
 pub(crate) mod user;
 
 #[derive(Clone)]
-pub(crate) struct Db {
+pub struct Db {
     pub(crate) pool: sqlx::PgPool,
 }
 

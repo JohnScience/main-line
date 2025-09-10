@@ -1,0 +1,35 @@
+# Based on https://github.com/LukeMathWalker/cargo-chef
+
+FROM lukemathwalker/cargo-chef:latest-rust-1 AS chef
+WORKDIR /main-line
+
+FROM chef AS planner
+# We create a dummy main.rs file because cargo-chef internally runs `cargo metadata` which
+# requires a src/main.rs file to exist.
+RUN mkdir -p ./rust/backend/src
+RUN mkdir -p ./rust/backend_lib/src
+RUN touch ./rust/backend/src/main.rs
+RUN touch ./rust/backend_lib/src/lib.rs
+COPY ./rust/Cargo.toml ./rust/Cargo.toml
+COPY ./rust/backend/Cargo.toml ./rust/backend/Cargo.toml
+COPY ./rust/backend_lib/Cargo.toml ./rust/backend_lib/Cargo.toml
+WORKDIR /main-line/rust
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM chef AS builder
+
+WORKDIR /main-line/rust
+COPY --from=planner /main-line/rust/recipe.json ./recipe.json
+# Build dependencies - this is the caching Docker layer!
+RUN cargo chef cook --release --recipe-path recipe.json
+# Build application
+WORKDIR /main-line
+COPY ./rust/.cargo/ ./rust/.cargo/
+COPY ./rust/Cargo.toml ./rust/Cargo.toml
+COPY ./rust/backend/src/ ./rust/backend/src/
+COPY ./rust/backend/Cargo.toml ./rust/backend/Cargo.toml
+COPY ./rust/backend_lib/src/ ./rust/backend_lib/src/
+COPY ./rust/backend_lib/Cargo.toml ./rust/backend_lib/Cargo.toml
+COPY ./migrations/ ./migrations/
+
+FROM builder AS rust-workspace

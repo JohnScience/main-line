@@ -2,12 +2,12 @@ use anyhow::Context as _;
 use std::env;
 
 #[derive(Debug, Clone)]
-pub(crate) struct PgEnv {
-    pub(crate) host: String,
-    pub(crate) user: String,
-    pub(crate) password: String,
-    pub(crate) port: u16,
-    pub(crate) db_name: String,
+pub struct PgEnv {
+    pub host: String,
+    pub user: String,
+    pub password: String,
+    pub port: u16,
+    pub db_name: String,
 }
 
 impl PgEnv {
@@ -28,22 +28,11 @@ impl PgEnv {
             db_name,
         })
     }
-
-    pub(crate) fn dev() -> Self {
-        PgEnv {
-            // host is the name of the Docker service in docker-compose.yml
-            host: "db".into(),
-            user: "tester".into(),
-            password: "tester".into(),
-            port: 5432,
-            db_name: "tester".into(),
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct Env {
-    pub(crate) pg: PgEnv,
+pub struct Env {
+    pub pg: PgEnv,
 }
 
 impl Env {

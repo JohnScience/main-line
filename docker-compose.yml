@@ -18,6 +18,14 @@ services:
       timeout: 3s
       retries: 10
 
+  # this service exists only to build the image
+  rust-workspace:
+    build:
+      context: ./
+      dockerfile: Dockerfile.rust-workspace
+    image: rust-workspace
+    profiles: ["build-only"]
+
   backend:
     build:
       context: ./

@@ -1,2 +1,0 @@
-[env]
-DATABASE_URL = "postgres://tester:tester@localhost:5432/tester"

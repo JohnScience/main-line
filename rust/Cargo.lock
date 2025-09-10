@@ -140,12 +140,22 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
- "derive_more",
- "serde",
- "sqlx",
+ "backend_lib",
  "tokio",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "backend_lib"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "derive_more",
+ "serde",
+ "sqlx",
+ "tracing",
  "utoipa",
  "utoipa-swagger-ui",
  "utoipauto",

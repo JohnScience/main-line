@@ -6,19 +6,16 @@ use crate::context::Context;
 mod api;
 mod general;
 
-#[utoipauto(paths = "./backend/src")]
+#[utoipauto(paths = "./backend_lib/src")]
 #[derive(OpenApi)]
 #[openapi(
     tags(
         (name = "todo", description = "Todo management endpoints.")
     ),
 )]
-pub(crate) struct ApiDoc;
+pub struct ApiDoc;
 
-pub(crate) fn make_router<S>(ctx: Context) -> axum::Router<S>
-where
-    S: Clone + Send + Sync + 'static,
-{
+pub fn make_router(ctx: Context) -> axum::Router {
     let router = axum::Router::new();
     let router = general::add_routes(router);
     let router = api::add_nested_routes(router);

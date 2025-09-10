@@ -33,7 +33,7 @@ pub(crate) async fn register(
     username: &str,
     password_hash: &str,
 ) -> register::Output {
-    let res = sqlx::query_scalar!(
+    let res: sqlx::Result<UserId> = sqlx::query_scalar!(
         r#"
         INSERT INTO users (username, password_hash)
         VALUES ($1, $2)

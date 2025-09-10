@@ -1,10 +1,6 @@
 use tracing::info;
 
-pub(crate) mod context;
-pub(crate) mod db;
-pub(crate) mod middleware;
-
-mod requests;
+use backend_lib::{Context, make_router};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -14,12 +10,9 @@ async fn main() -> anyhow::Result<()> {
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
 
-    let env = context::env::Env::from_env()?;
-    let db = db::Db::new(&env.pg).await?;
+    let ctx = Context::new().await?;
 
-    let ctx = context::Context { env, db };
-
-    let app = requests::make_router(ctx);
+    let app = make_router(ctx);
 
     info!("Serving the app...");
 
