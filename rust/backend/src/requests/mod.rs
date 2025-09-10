@@ -1,6 +1,8 @@
 use utoipa::OpenApi;
 use utoipauto::utoipauto;
 
+use crate::context::Context;
+
 mod api;
 mod general;
 
@@ -13,12 +15,14 @@ mod general;
 )]
 pub(crate) struct ApiDoc;
 
-pub(crate) fn make_router<S>() -> axum::Router<S>
+pub(crate) fn make_router<S>(ctx: Context) -> axum::Router<S>
 where
     S: Clone + Send + Sync + 'static,
 {
     let router = axum::Router::new();
     let router = general::add_routes(router);
     let router = api::add_nested_routes(router);
-    router.layer(axum::middleware::from_fn(crate::middleware::log_request))
+    router
+        .layer(axum::middleware::from_fn(crate::middleware::log_request))
+        .with_state(ctx)
 }

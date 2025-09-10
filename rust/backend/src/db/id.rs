@@ -1,3 +1,3 @@
-#[derive(sqlx::Type)]
+#[derive(sqlx::Type, derive_more::Display)]
 #[sqlx(transparent)]
-pub(crate) struct UserId(i64);
+pub(crate) struct UserId(pub(in crate::db) i32);

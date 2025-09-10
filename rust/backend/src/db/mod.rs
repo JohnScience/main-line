@@ -7,6 +7,7 @@ use crate::context::env::PgEnv;
 pub(crate) mod id;
 pub(crate) mod user;
 
+#[derive(Clone)]
 pub(crate) struct Db {
     pub(crate) pool: sqlx::PgPool,
 }
@@ -29,7 +30,13 @@ impl Db {
             .max_connections(5)
             .connect(&url)
             .await?;
-        Ok(Db { pool })
+        let db = Db { pool };
+
+        db.test().await?;
+
+        sqlx::migrate!("../../migrations").run(&db.pool).await?;
+
+        Ok(db)
     }
 
     pub(crate) async fn test(&self) -> anyhow::Result<()> {

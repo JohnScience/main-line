@@ -1,5 +1,14 @@
-use axum::{Router, extract::Json, routing::post};
-use tracing::{debug, info};
+use axum::response::IntoResponse as _;
+
+use axum::{
+    Router,
+    extract::{Json, State},
+    http::StatusCode,
+    response::Response,
+    routing::post,
+};
+
+use crate::{context::Context, db};
 
 #[derive(serde::Deserialize, utoipa::ToSchema)]
 pub(crate) struct RegisterRequest {
@@ -14,31 +23,31 @@ pub(crate) struct RegisterRequest {
     responses(
         (status = 200, description = "User registered successfully"),
         (status = 409, description = "User already exists"),
-        (status = 400, description = "Bad request"),
+        (status = 500, description = "Internal server error"),
     ),
     request_body = RegisterRequest,
 )]
 #[axum::debug_handler]
-async fn post_register(Json(req): Json<RegisterRequest>) {
+async fn post_register(State(ctx): State<Context>, Json(req): Json<RegisterRequest>) -> Response {
     let RegisterRequest {
         username,
         password_hash,
     } = req;
-    debug!(
-        "TODO: add registration logic for user `{username}` with password hash `{password_hash}`"
-    );
+    match db::user::register(&ctx.db, &username, &password_hash).await {
+        db::user::register::Output::Success { user_id: _ } => (StatusCode::OK).into_response(),
+        db::user::register::Output::AlreadyExists => (StatusCode::CONFLICT).into_response(),
+        db::user::register::Output::UnknownError { err: _ } => {
+            (StatusCode::INTERNAL_SERVER_ERROR).into_response()
+        }
+    }
 }
 
-fn user_routes<S>() -> Router<S>
-where
-    S: Clone + Send + Sync + 'static,
-{
+fn user_routes() -> Router<Context> {
     Router::new().route("/register", post(post_register))
 }
 
-pub(in crate::requests::api) fn add_nested_routes<S>(router: axum::Router<S>) -> axum::Router<S>
-where
-    S: Clone + Send + Sync + 'static,
-{
+pub(in crate::requests::api) fn add_nested_routes(
+    router: axum::Router<Context>,
+) -> axum::Router<Context> {
     router.nest("/user", user_routes())
 }

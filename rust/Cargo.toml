@@ -5,6 +5,7 @@ resolver = "3"
 [workspace.dependencies]
 anyhow = "1.0.99"
 axum = { version = "0.8.4", features = ["macros"] }
+derive_more = { version = "2.0.1", features = ["display"] }
 serde = { version = "1.0.219", features = ["derive"] }
 sqlx = { version = "0.8.6", features = [
     "runtime-tokio",

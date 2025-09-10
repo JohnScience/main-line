@@ -12,15 +12,14 @@ async fn main() -> anyhow::Result<()> {
 
     info!("Starting main-line backend...");
 
-    let app = requests::make_router();
-
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
-    let context = context::Context {
-        env: context::env::Env::from_env()?,
-    };
-    let db = db::Db::new(&context.env.pg).await?;
 
-    db.test().await?;
+    let env = context::env::Env::from_env()?;
+    let db = db::Db::new(&env.pg).await?;
+
+    let ctx = context::Context { env, db };
+
+    let app = requests::make_router(ctx);
 
     info!("Serving the app...");
 
