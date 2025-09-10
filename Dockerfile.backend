@@ -1,3 +1,6 @@
+# syntax=docker/dockerfile:1
+# check=skip=SecretsUsedInArgOrEnv
+
 # Based on https://github.com/LukeMathWalker/cargo-chef
 
 FROM lukemathwalker/cargo-chef:latest-rust-1 AS chef
@@ -14,6 +17,17 @@ WORKDIR /main-line/rust
 RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder
+RUN apt-get update && apt-get install -y postgresql postgresql-contrib && cargo install sqlx-cli --no-default-features --features postgres
+
+ARG POSTGRES_USER=tester
+ARG POSTGRES_PASSWORD=tester
+ARG POSTGRES_DB=tester
+ARG POSTGRES_PORT=5432
+
+# Set DATABASE_URL for sqlx
+ENV DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:${POSTGRES_PORT}/${POSTGRES_DB}
+ENV SQLX_OFFLINE=true
+
 WORKDIR /main-line/rust
 COPY --from=planner /main-line/rust/recipe.json ./recipe.json
 # Build dependencies - this is the caching Docker layer!
@@ -23,7 +37,18 @@ WORKDIR /main-line
 COPY ./rust/Cargo.toml ./rust/Cargo.toml
 COPY ./rust/backend/ ./rust/backend/
 COPY ./migrations/ ./migrations/
+
 WORKDIR /main-line/rust
+# Start Postgres temporarily and run migrations
+RUN service postgresql start && \
+    su - postgres -c "psql -c \"CREATE USER ${POSTGRES_USER} WITH PASSWORD '${POSTGRES_PASSWORD}';\"" && \
+    su - postgres -c "createdb -O ${POSTGRES_USER} ${POSTGRES_DB}" && \
+    # Apply migrations
+    cargo sqlx migrate run --source ../migrations && \
+    cd backend && \
+    # Generate the sqlx data
+    cargo sqlx prepare --workspace -- --all-targets
+
 RUN cargo build --release --package backend
 
 # We do not need the Rust toolchain to run the binary!
