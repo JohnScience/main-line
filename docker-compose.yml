@@ -18,22 +18,10 @@ services:
       timeout: 3s
       retries: 10
 
-  # this service exists only to build the image
-  rust-workspace:
-    build:
-      context: ./
-      dockerfile: Dockerfile.rust-workspace
-    image: rust-workspace
-    profiles: ["build-only"]
-
   backend:
     build:
       context: ./
       dockerfile: Dockerfile.backend
-      # The docs (https://docs.docker.com/compose/how-tos/dependent-images/#use-another-services-image-as-the-base-image) state it should work
-      # but it doesn't
-      # additional_contexts:
-      #  rust-workspace: "service:rust-workspace"
     depends_on:
       db:
         condition: service_healthy
