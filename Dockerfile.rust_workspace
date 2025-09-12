@@ -8,11 +8,14 @@ FROM chef AS planner
 # requires a src/main.rs file to exist.
 RUN mkdir -p ./rust/backend/src
 RUN mkdir -p ./rust/backend_lib/src
+RUN mkdir -p ./rust/openapi_spec/src
 RUN touch ./rust/backend/src/main.rs
 RUN touch ./rust/backend_lib/src/lib.rs
+RUN touch ./rust/openapi_spec/src/main.rs
 COPY ./rust/Cargo.toml ./rust/Cargo.toml
 COPY ./rust/backend/Cargo.toml ./rust/backend/Cargo.toml
 COPY ./rust/backend_lib/Cargo.toml ./rust/backend_lib/Cargo.toml
+COPY ./rust/openapi_spec/Cargo.toml ./rust/openapi_spec/Cargo.toml
 WORKDIR /main-line/rust
 RUN cargo chef prepare --recipe-path recipe.json
 
@@ -30,6 +33,8 @@ COPY ./rust/backend/src/ ./rust/backend/src/
 COPY ./rust/backend/Cargo.toml ./rust/backend/Cargo.toml
 COPY ./rust/backend_lib/src/ ./rust/backend_lib/src/
 COPY ./rust/backend_lib/Cargo.toml ./rust/backend_lib/Cargo.toml
+COPY ./rust/openapi_spec/src/ ./rust/openapi_spec/src/
+COPY ./rust/openapi_spec/Cargo.toml ./rust/openapi_spec/Cargo.toml
 COPY ./migrations/ ./migrations/
 
 FROM builder AS rust-workspace

@@ -5,4 +5,4 @@ pub(crate) mod middleware;
 mod requests;
 
 pub use context::Context;
-pub use requests::make_router;
+pub use requests::{ApiDoc, make_router};

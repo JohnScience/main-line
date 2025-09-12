@@ -1,0 +1,15 @@
+FROM main-line-backend_lib AS backend-lib
+
+WORKDIR /main-line/rust
+
+RUN cargo build --release --package openapi_spec
+
+
+FROM debian:bookworm-slim AS runtime
+
+COPY --from=backend-lib /main-line/rust/target/release/openapi_spec /usr/local/bin
+RUN /usr/local/bin/openapi_spec > /usr/local/bin/openapi_spec.json
+
+FROM scratch AS openapi_spec
+WORKDIR /openapi_spec
+COPY --from=runtime /usr/local/bin/openapi_spec.json /openapi_spec/openapi_spec.json

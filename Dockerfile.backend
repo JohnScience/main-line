@@ -9,7 +9,6 @@ RUN cargo build --release --package backend
 
 # We do not need the Rust toolchain to run the binary!
 FROM debian:bookworm-slim AS runtime
-WORKDIR /backend
 
 COPY --from=backend-lib /main-line/rust/target/release/backend /usr/local/bin
 EXPOSE 3000

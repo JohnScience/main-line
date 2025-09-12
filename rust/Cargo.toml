@@ -1,5 +1,5 @@
 [workspace]
-members = ["backend", "backend_lib"]
+members = ["backend", "backend_lib", "openapi_spec"]
 resolver = "3"
 
 [workspace.dependencies]
