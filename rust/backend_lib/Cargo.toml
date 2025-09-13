@@ -13,3 +13,4 @@ tracing.workspace = true
 utoipa.workspace = true
 utoipauto.workspace = true
 utoipa-swagger-ui.workspace = true
+shared_items_lib = { path = "../shared_items_lib" }

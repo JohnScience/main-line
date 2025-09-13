@@ -6,13 +6,19 @@ WORKDIR /main-line
 FROM chef AS planner
 # We create a dummy main.rs file because cargo-chef internally runs `cargo metadata` which
 # requires a src/main.rs file to exist.
+RUN mkdir -p ./rust/shared_items_lib/src
+RUN mkdir -p ./rust/export_shared_types/src
 RUN mkdir -p ./rust/backend/src
 RUN mkdir -p ./rust/backend_lib/src
 RUN mkdir -p ./rust/openapi_spec/src
+RUN touch ./rust/shared_items_lib/src/lib.rs
+RUN touch ./rust/export_shared_types/src/main.rs
 RUN touch ./rust/backend/src/main.rs
 RUN touch ./rust/backend_lib/src/lib.rs
 RUN touch ./rust/openapi_spec/src/main.rs
 COPY ./rust/Cargo.toml ./rust/Cargo.toml
+COPY ./rust/shared_items_lib/Cargo.toml ./rust/shared_items_lib/Cargo.toml
+COPY ./rust/export_shared_types/Cargo.toml ./rust/export_shared_types/Cargo.toml
 COPY ./rust/backend/Cargo.toml ./rust/backend/Cargo.toml
 COPY ./rust/backend_lib/Cargo.toml ./rust/backend_lib/Cargo.toml
 COPY ./rust/openapi_spec/Cargo.toml ./rust/openapi_spec/Cargo.toml
@@ -20,7 +26,6 @@ WORKDIR /main-line/rust
 RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder
-
 WORKDIR /main-line/rust
 COPY --from=planner /main-line/rust/recipe.json ./recipe.json
 # Build dependencies - this is the caching Docker layer!
@@ -29,6 +34,10 @@ RUN cargo chef cook --release --recipe-path recipe.json
 WORKDIR /main-line
 COPY ./rust/.cargo/ ./rust/.cargo/
 COPY ./rust/Cargo.toml ./rust/Cargo.toml
+COPY ./rust/shared_items_lib/src/ ./rust/shared_items_lib/src/
+COPY ./rust/shared_items_lib/Cargo.toml ./rust/shared_items_lib/Cargo.toml
+COPY ./rust/export_shared_types/src/ ./rust/export_shared_types/src/
+COPY ./rust/export_shared_types/Cargo.toml ./rust/export_shared_types/Cargo.toml
 COPY ./rust/backend/src/ ./rust/backend/src/
 COPY ./rust/backend/Cargo.toml ./rust/backend/Cargo.toml
 COPY ./rust/backend_lib/src/ ./rust/backend_lib/src/

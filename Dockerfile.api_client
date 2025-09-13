@@ -7,7 +7,7 @@ WORKDIR /usr/src/app
 
 # install dependencies into temp directory
 # this will cache them and speed up future builds
-FROM base AS install
+FROM base AS gen-api-client-install
 RUN mkdir -p /temp/dev
 COPY gen-api-client/package.json gen-api-client/bun.lockb /temp/dev/
 RUN cd /temp/dev && bun install --frozen-lockfile
@@ -19,18 +19,25 @@ RUN cd /temp/prod && bun install --frozen-lockfile --production
 
 # copy node_modules from temp directory
 # then copy all (non-ignored) project files into the image
-FROM base AS prebuild
-COPY --from=install /temp/dev/node_modules node_modules
+FROM base AS gen-api-client-prebuild
+COPY --from=gen-api-client-install /temp/dev/node_modules node_modules
 COPY ./gen-api-client .
 
 # copy production dependencies and source code into final image
-FROM base AS build
-COPY --from=install /temp/prod/node_modules node_modules
-COPY --from=prebuild /usr/src/app/index.js .
-COPY --from=prebuild /usr/src/app/package.json .
+FROM base AS gen-api-client-build
+COPY --from=gen-api-client-install /temp/prod/node_modules node_modules
+COPY --from=gen-api-client-prebuild /usr/src/app/index.js .
+COPY --from=gen-api-client-prebuild /usr/src/app/package.json .
+COPY --from=gen-api-client-prebuild /usr/src/app/api-client-template/ api-client-template/
 COPY --from=main-line-openapi_spec /openapi_spec/openapi_spec.json .
+
 RUN bun run index.js -i openapi_spec.json -o ./dest/api_client
+
+FROM main-line-rust_workspace AS rust_workspace
+WORKDIR /main-line/rust
+RUN cargo run -p export_shared_types -- ../gen_shared_types.ts
 
 FROM scratch AS api_client
 WORKDIR /api_client
-COPY --from=build /usr/src/app/dest/api_client .
+COPY --from=gen-api-client-build /usr/src/app/dest/api_client .
+COPY --from=rust_workspace /main-line/gen_shared_types.ts /api_client/src/gen_shared_types.ts
