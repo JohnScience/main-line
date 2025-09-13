@@ -97,7 +97,7 @@ docker container rm main-line-openapi_spec
 ```
 
 * `main-line-backend` (`Dockerfile.backend`): This is an *application image* that is built using `main-line-backend_lib` (`Dockerfile.backend_lib`) and is used to run the backend service.
-* `main-line-api_client` (`Dockerfile.api_client`): This is a *data-only image* that is built using the OpenAPI spec from `main-line-openapi_spec` (`Dockerfile.openapi_spec`) and stores the API client generated from the OpenAPI specification. This client is a nested directory with various `.ts` files. It is *not* an npm package. To extract the generated API client from the image, you can use the following commands:
+* `main-line-api_client` (`Dockerfile.api_client`): This is a *data-only image* that is built using the OpenAPI spec from `main-line-openapi_spec` (`Dockerfile.openapi_spec`) and using the `gen-api-client` tool to generate a TypeScript package with an API client and the `rust/export_shared_types` tool to generate the TypeScript definitions for the types shared between the backend and the API client that are defined in Rust and are not part of the OpenAPI specification. To extract the generated API client from the image, you can use the following commands:
 
 ```bash
 # Create a container from the image (without running it). The container is not meant to be run, so
