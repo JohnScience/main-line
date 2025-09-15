@@ -4,11 +4,7 @@ import { z } from "zod/v4";
 import { MAX_CHESS_DOT_COM_USERNAME_LENGTH, MAX_LICHESS_USERNAME_LENGTH, MAX_PASSWORD_LENGTH, MAX_USERNAME_LENGTH, MIN_CHESS_DOT_COM_USERNAME_LENGTH, MIN_LICHESS_USERNAME_LENGTH, MIN_PASSWORD_LENGTH, MIN_USERNAME_LENGTH } from "./config";
 import { LoginInfo } from "./LoginForm";
 import { LoginError } from "./shared";
-import { postRegister } from "@/api-client";
-import { createClient } from "@/api-client/client"
-import type { PostRegisterData, PostRegisterErrors } from "@/api-client/types.gen";;
-import type { Config as ClientConfig, Client } from "@/api-client/client/types.gen";
-import type { Options as RequestOptions } from "@/api-client/sdk.gen";
+import { postRegister } from "api-client";
 
 // This function creates a Zod refinement function that checks the length of an optional field
 // submitted through a form. Sadly, Next.js's `<Form>` component submits empty optional fields as empty strings.
@@ -86,35 +82,19 @@ export async function handleLogin(loginFormData: FormData) {
     }
 
     if (loginInfoRes.data.tab === "signUp") {
-        // TODO: choose the base URL based on the environment (development, production, etc.)
-        const clientConfig: ClientConfig = {
-            baseUrl: "http://localhost:3000"
-        };
-        const client: Client = createClient(clientConfig);
-        const requestOptions: RequestOptions<PostRegisterData, false> = {
-            client,
+        const res = await postRegister({
             body: {
                 username: loginInfoRes.data.username,
                 password_hash: loginInfoRes.data.password, // TODO: hash the password
             }
-        };
-
-        const res = await postRegister(requestOptions);
-
-        if (res.response.status > 400 && res.response.status < 600) {
-            const errorStatus = res.response.status as keyof PostRegisterErrors;
-            switch (errorStatus) {
-                case 409: {
-                    throw new Error(LoginError.USER_ALREADY_EXISTS);
-                }
-                case 500: {
-                    throw new Error(LoginError.INTERNAL_SERVER_ERROR);
-                }
-            }
-        }
-        if (res.response.status === 200) {
-            // TODO: sign in the user after signing up
-            return;
+        });
+        switch (res) {
+            case "Success":
+                return;
+            case "AlreadyExists":
+                throw new Error(LoginError.USER_ALREADY_EXISTS);
+            case "InternalServerError":
+                throw new Error(LoginError.INTERNAL_SERVER_ERROR);
         }
     } else {
         // TODO: handle sign in
