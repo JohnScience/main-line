@@ -104,6 +104,15 @@ DOCKER_IMAGES: list[DockerImageDesc] = [
             artifact_path="api_client",
             dest=["api-client"]
         )
+    },
+    # This is an *application image* that is built using the `main-line-api_client` (`Dockerfile.api_client`)
+    # and is used to run the frontend application.
+    {
+        "name": None,
+        "dockerfile": "Dockerfile.frontend",
+        "is_intermediate": False,
+        "img_dependencies": ["main-line-api_client"],
+        "purpose_specific_data": PurposeSpecificDataVariant.Application()
     }
 ]
 

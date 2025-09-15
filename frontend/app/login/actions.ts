@@ -71,14 +71,21 @@ const loginInfoSchema = z.union([
     })
 ]) satisfies z.ZodType<LoginInfo>;
 
+export type LoginOutcome = {
+    kind: "success";
+} | {
+    kind: "error";
+    error: LoginError;
+}
+
 // Handles both signing in and signing up.
-export async function handleLogin(loginFormData: FormData) {
+export async function handleLogin(previousState: unknown, loginFormData: FormData): Promise<LoginOutcome> {
     const formObj = Object.fromEntries(loginFormData.entries());
     const loginInfoRes: z.ZodSafeParseResult<LoginInfo> = loginInfoSchema.safeParse(formObj);
 
     if (!loginInfoRes.success) {
         console.error(loginInfoRes.error.issues);
-        throw new Error(LoginError.ILLFORMED_CREDENTIALS);
+        return { kind: "error", error: LoginError.INVALID_FORM_OBJECT };
     }
 
     if (loginInfoRes.data.tab === "signUp") {
@@ -88,15 +95,19 @@ export async function handleLogin(loginFormData: FormData) {
                 password_hash: loginInfoRes.data.password, // TODO: hash the password
             }
         });
+
+        console.log('postRegister result:', res);
+
         switch (res) {
             case "Success":
-                return;
+                return { kind: "success" };
             case "AlreadyExists":
-                throw new Error(LoginError.USER_ALREADY_EXISTS);
+                return { kind: "error", error: LoginError.USER_ALREADY_EXISTS };
             case "InternalServerError":
-                throw new Error(LoginError.INTERNAL_SERVER_ERROR);
+                return { kind: "error", error: LoginError.INTERNAL_SERVER_ERROR };
         }
     } else {
         // TODO: handle sign in
+        return { kind: "error", error: LoginError.INTERNAL_SERVER_ERROR }
     }
 }

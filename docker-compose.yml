@@ -45,3 +45,14 @@ services:
       - db
     restart: unless-stopped
   
+  frontend:
+    build:
+      context: ./
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "3001:3001"
+    environment:
+      BASE_API_URL: http://backend:3000
+    depends_on:
+      - backend
+    restart: unless-stopped

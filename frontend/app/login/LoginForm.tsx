@@ -1,7 +1,7 @@
 "use client";
 
 import { z } from "zod/v4";
-import { FormEvent, useState } from "react";
+import { FormEvent, useActionState, useEffect, useState } from "react";
 import Form from "next/form";
 import { handleLogin } from "./actions";
 import { Toaster, toast } from "sonner";
@@ -41,31 +41,22 @@ function disableEmptyInputs(event: FormEvent<HTMLFormElement>) {
     }
 }
 
-async function handleLoginWrapper(formData: FormData) {
-    "use client";
-    try {
-        await handleLogin(formData);
-        toast.success("Login successful!");
-    } catch (error) {
-        if (!(error instanceof Error)) {
-            toast.error(`An unknown error returned from ${handleLogin.name}`);
-            return;
-        }
-        const parsedError = loginErrorSchema.safeParse(error.message);
-        if (!parsedError.success) {
-            toast.error(`Couldn't parse the error returned from ${handleLogin.name}: ${error.message}`);
-            console.error(parsedError.error.issues);
-            console.error(error.message);
-            return;
-        }
-        toast.error(`Login failed: ${parsedError.data}`);
-    }
-}
-
 export default function LoginForm() {
     const [loginInfo, setLoginInfo] = useState<Partial<LoginInfo> & { tab: LoginTab }>({
         tab: "signIn",
     });
+    const [loginOutcome, handleLoginAction, isLoginPending] = useActionState(handleLogin, undefined);
+    useEffect(() => {
+        if (loginOutcome !== undefined) {
+            console.log('loginOutcome:', loginOutcome);
+            // Handle the login outcome (success or error)
+            if (loginOutcome.kind === "success") {
+                toast.success("Login successful!");
+            } else {
+                toast.error(`Login failed: ${loginOutcome.error}`);
+            }
+        }
+    }, [loginOutcome]);
 
     return (
         <>
@@ -97,7 +88,7 @@ export default function LoginForm() {
                 {/* Forms */}
                 {loginInfo.tab === "signIn" ? (
                     <Form
-                        action={handleLoginWrapper}
+                        action={handleLoginAction}
                         className="flex flex-col gap-4"
                         onSubmit={disableEmptyInputs}
                     >
@@ -131,7 +122,7 @@ export default function LoginForm() {
                 ) : (
                     <>
                         {/* TODO: find a way to avoid sending empty strings for optional fields */}
-                        <Form action={handleLoginWrapper} className="flex flex-col gap-4">
+                        <Form action={handleLoginAction} className="flex flex-col gap-4">
                             <input type="hidden" name="tab" value={loginInfo.tab} />
                             <input
                                 type="text"

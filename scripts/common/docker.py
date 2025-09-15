@@ -30,7 +30,8 @@ def build_docker_image(img: DockerImageBuildArgs, options: BuildOptions):
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
-        check=True
+        check=True,
+        encoding="utf-8"
     )
 
 def docker_image_exists(img_name: str) -> bool:

@@ -1,0 +1,19 @@
+FROM main-line-api_client AS api-client
+
+# We use npm instead of bun because
+# bun run build had issues with symlinks when
+# running `bun run build` in the Docker container,
+# even without the `--turbo` flag.
+FROM node:24-bookworm AS base
+
+FROM base AS frontend-build
+WORKDIR /usr/src/main-line
+COPY frontend frontend
+COPY --from=api-client /api_client api-client
+WORKDIR /usr/src/main-line/frontend
+RUN npm install --omit=dev
+RUN npm i @tailwindcss/oxide-linux-x64-gnu
+RUN npm i lightningcss-linux-x64-gnu
+RUN npm run build
+EXPOSE 3001
+CMD ["npm", "run", "start", "--", "-p", "3001"]
