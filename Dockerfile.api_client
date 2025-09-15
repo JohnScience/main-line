@@ -37,7 +37,12 @@ FROM main-line-rust_workspace AS rust_workspace
 WORKDIR /main-line/rust
 RUN cargo run -p export_shared_types -- ../gen_shared_types.ts
 
+FROM base AS api-client-build
+WORKDIR /usr/src/api_client
+COPY --from=gen-api-client-build /usr/src/app/dest/api_client .
+COPY --from=rust_workspace /main-line/gen_shared_types.ts /usr/src/api_client/src/gen_shared_types.ts
+RUN bun run build
+
 FROM scratch AS api_client
 WORKDIR /api_client
-COPY --from=gen-api-client-build /usr/src/app/dest/api_client .
-COPY --from=rust_workspace /main-line/gen_shared_types.ts /api_client/src/gen_shared_types.ts
+COPY --from=api-client-build /usr/src/api_client .
