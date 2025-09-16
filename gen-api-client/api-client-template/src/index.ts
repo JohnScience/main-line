@@ -22,16 +22,3 @@ export async function postRegister(options: Parameters<typeof postRegisterInner>
         case 500: return "InternalServerError";
     }
 }
-
-async function main() {
-    const options: Parameters<typeof postRegisterInner>[0] = {
-        body: {
-            username: "testuser",
-            password_hash: "testpassword",
-        }
-    };
-    const response = await postRegister(options);
-    console.log(response);
-}
-
-main();
