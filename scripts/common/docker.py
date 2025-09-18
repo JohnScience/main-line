@@ -25,13 +25,14 @@ def build_docker_image(img: DockerImageBuildArgs, options: BuildOptions):
         remove_docker_image(img["name"])
 
     print(f"{options['tabulation']}\tBuilding Docker image: {img['name']} from {img['dockerfile']}...")
+    args = ["docker", "build", "-f", img["dockerfile"], "-t", img["name"]]
+    if "build_args" in img and img["build_args"] is not None:
+        for arg_key, arg_value in img["build_args"].items():
+            args.extend(["--build-arg", f"{arg_key}={arg_value}"])
+    args.append(".")
     subprocess.run(
-        ["docker", "build", "-f", img["dockerfile"], "-t", img["name"], "."],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        check=True,
-        encoding="utf-8"
+        args,
+        check=True
     )
 
 def docker_image_exists(img_name: str) -> bool:

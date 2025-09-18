@@ -38,10 +38,11 @@ WORKDIR /main-line/rust
 RUN cargo run -p export_shared_types -- ../gen_shared_types.ts
 
 FROM base AS api-client-build
+ARG COMPILED=true
 WORKDIR /usr/src/api_client
 COPY --from=gen-api-client-build /usr/src/app/dest/api_client .
 COPY --from=rust_workspace /main-line/gen_shared_types.ts /usr/src/api_client/src/gen_shared_types.ts
-RUN bun run build
+RUN if [ "$COMPILED" = "true" ]; then bun run build; fi
 
 FROM scratch AS api_client
 WORKDIR /api_client

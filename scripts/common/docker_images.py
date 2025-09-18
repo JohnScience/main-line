@@ -44,6 +44,7 @@ class DockerImageDesc(TypedDict):
     dockerfile: str
     is_intermediate: bool
     img_dependencies: list[str]
+    build_args: dict[str, str] | None
     purpose_specific_data: PurposeSpecificData
 
 DOCKER_IMAGES: list[DockerImageDesc] = [
@@ -95,6 +96,21 @@ DOCKER_IMAGES: list[DockerImageDesc] = [
     # tool to generate a TypeScript package with an API client and the `rust/export_shared_types`
     # tool to generate the TypeScript definitions for the types shared between the backend and
     # the API client that are defined in Rust and are not part of the OpenAPI specification.
+    {
+        "name": "main-line-api_client_raw",
+        "dockerfile": "Dockerfile.api_client",
+        "is_intermediate": True,
+        "img_dependencies": ["main-line-openapi_spec", "main-line-rust_workspace"],
+        "build_args": {
+            "COMPILED": "false"
+        },
+        "purpose_specific_data": PurposeSpecificDataVariant.DataOnly(
+            artifact_path="api_client",
+            dest=["api-client"]
+        )
+    },
+    # It's similar to `main-line-api_client_raw`, but it also builds the client code.
+    # This image is more fragile because building the client can fail for various reasons.
     {
         "name": "main-line-api_client",
         "dockerfile": "Dockerfile.api_client",

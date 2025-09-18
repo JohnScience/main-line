@@ -8,11 +8,13 @@ use axum::{
     routing::post,
 };
 
-use shared_items_lib::service_responses::PostRegisterResponse;
+use shared_items_lib::service_responses::{
+    PostRegisterResponse, PostSaltResponse, SaltResponseSuccess,
+};
 
 use crate::context::Context;
 use crate::service;
-use crate::service::user::RegisterRequest;
+use crate::service::user::{RegisterRequest, SaltRequest};
 
 #[utoipa::path(
     post,
@@ -39,8 +41,32 @@ async fn post_register(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/user/salt",
+    tag = "user",
+    responses(
+        (status = 200, description = "User salt retrieved successfully", body = SaltResponseSuccess),
+        (status = 404, description = "User not found", body = ()),
+        (status = 500, description = "Internal server error", body = ()),
+    ),
+    request_body = SaltRequest,
+)]
+async fn post_salt(
+    State(ctx): State<Context>,
+    Json(request): Json<service::user::SaltRequest>,
+) -> Response {
+    match service::user::salt(&ctx, request).await {
+        PostSaltResponse::Success(resp) => (StatusCode::OK, Json(resp)).into_response(),
+        PostSaltResponse::UserNotFound => StatusCode::NOT_FOUND.into_response(),
+        PostSaltResponse::InternalServerError => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
 fn user_routes() -> Router<Context> {
-    Router::new().route("/register", post(post_register))
+    Router::new()
+        .route("/register", post(post_register))
+        .route("/salt", post(post_salt))
 }
 
 pub(in crate::requests::api) fn add_nested_routes(

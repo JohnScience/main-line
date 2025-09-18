@@ -68,3 +68,36 @@ pub(crate) async fn register(
 
     output
 }
+
+pub(crate) mod get_password_hash {
+    /// See <https://docs.rs/argon2/0.5.3/argon2/struct.PasswordHash.html>
+    #[derive(sqlx::Type)]
+    #[sqlx(transparent)]
+    pub(crate) struct PHCString(pub(in crate::db) String);
+
+    impl<'a> TryFrom<&'a PHCString> for argon2::PasswordHash<'a> {
+        type Error = argon2::password_hash::Error;
+
+        fn try_from(value: &'a PHCString) -> Result<Self, Self::Error> {
+            argon2::PasswordHash::new(&value.0)
+        }
+    }
+}
+
+pub(crate) async fn get_password_hash(
+    pg_pool: &sqlx::PgPool,
+    username: &str,
+) -> sqlx::Result<Option<get_password_hash::PHCString>> {
+    let res: Option<String> = sqlx::query_scalar!(
+        r#"
+        SELECT password_hash
+        FROM users
+        WHERE username = $1
+        "#,
+        username,
+    )
+    .fetch_optional(pg_pool)
+    .await?;
+
+    Ok(res.map(get_password_hash::PHCString))
+}

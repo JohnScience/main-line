@@ -52,12 +52,12 @@ const loginInfoSchema = z.union([
     z.object({
         tab: z.literal("signIn"),
         username: z.string().min(MIN_USERNAME_LENGTH).max(MAX_USERNAME_LENGTH),
-        password: z.string().min(MIN_PASSWORD_LENGTH).max(MAX_PASSWORD_LENGTH),
+        password_hash: z.string().min(MIN_PASSWORD_LENGTH).max(MAX_PASSWORD_LENGTH),
     }),
     z.object({
         tab: z.literal("signUp"),
         username: z.string().min(MIN_USERNAME_LENGTH).max(MAX_USERNAME_LENGTH),
-        password: z.string().min(MIN_PASSWORD_LENGTH).max(MAX_PASSWORD_LENGTH),
+        password_hash: z.string().min(MIN_PASSWORD_LENGTH).max(MAX_PASSWORD_LENGTH),
         chessDotComUsername: z.string().superRefine(makeOptionalFieldLengthCheckRefinement(
             "chessDotComUsername",
             MIN_CHESS_DOT_COM_USERNAME_LENGTH,
@@ -69,7 +69,7 @@ const loginInfoSchema = z.union([
             MAX_LICHESS_USERNAME_LENGTH,
         )).optional(),
     })
-]) satisfies z.ZodType<LoginInfo>;
+]) satisfies z.ZodType<LoginInfo<"server">>;
 
 export type LoginOutcome = {
     kind: "success";
@@ -81,7 +81,7 @@ export type LoginOutcome = {
 // Handles both signing in and signing up.
 export async function handleLogin(previousState: unknown, loginFormData: FormData): Promise<LoginOutcome> {
     const formObj = Object.fromEntries(loginFormData.entries());
-    const loginInfoRes: z.ZodSafeParseResult<LoginInfo> = loginInfoSchema.safeParse(formObj);
+    const loginInfoRes: z.ZodSafeParseResult<LoginInfo<"server">> = loginInfoSchema.safeParse(formObj);
 
     if (!loginInfoRes.success) {
         console.error(loginInfoRes.error.issues);
@@ -92,7 +92,7 @@ export async function handleLogin(previousState: unknown, loginFormData: FormDat
         const res = await postRegister({
             body: {
                 username: loginInfoRes.data.username,
-                password_hash: loginInfoRes.data.password, // TODO: hash the password
+                password_hash: loginInfoRes.data.password_hash,
             }
         });
 
