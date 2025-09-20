@@ -15,11 +15,24 @@ mod general;
 )]
 pub struct ApiDoc;
 
-pub fn make_router(ctx: Context) -> axum::Router {
+pub fn make_router(ctx: Context) -> anyhow::Result<axum::Router> {
     let router = axum::Router::new();
     let router = general::add_routes(router);
     let router = api::add_nested_routes(router);
-    router
+
+    let base_frontend_url: axum::http::HeaderValue = ctx.env.base_frontend_url.parse()?;
+
+    let cors_layer = tower_http::cors::CorsLayer::new()
+        .allow_origin(base_frontend_url)
+        .allow_methods(tower_http::cors::Any)
+        .allow_headers([
+            axum::http::header::CONTENT_TYPE,
+            axum::http::header::AUTHORIZATION,
+        ]);
+
+    let router = router
         .layer(axum::middleware::from_fn(crate::middleware::log_request))
-        .with_state(ctx)
+        .layer(cors_layer)
+        .with_state(ctx);
+    Ok(router)
 }

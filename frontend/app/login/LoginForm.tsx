@@ -7,7 +7,8 @@ import { handleLogin } from "./actions";
 import { Toaster, toast } from "sonner";
 import { MAX_CHESS_DOT_COM_USERNAME_LENGTH, MAX_LICHESS_USERNAME_LENGTH, MAX_PASSWORD_LENGTH, MAX_USERNAME_LENGTH, MIN_CHESS_DOT_COM_USERNAME_LENGTH, MIN_LICHESS_USERNAME_LENGTH, MIN_PASSWORD_LENGTH, MIN_USERNAME_LENGTH } from "./config";
 import { LoginError } from "./shared";
-import argon2, { Argon2BrowserHashOptions, Argon2BrowserHashResult } from "argon2-browser";
+import argon2 from "argon2-browser/dist/argon2-bundled.min.js";
+import type { Argon2BrowserHashOptions, Argon2BrowserHashResult } from "argon2-browser";
 import { postSalt } from "api-client";
 import { OptionalKeys, OptionalProps } from "../_util/types";
 
@@ -53,44 +54,54 @@ function disableEmptyInputs(event: FormEvent<HTMLFormElement>) {
     }
 }
 
-async function onSignInSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    disableEmptyInputs(event);
-    const formData = new FormData(event.currentTarget);
-    const entries: Extract<LoginInfo<"client">, { tab: "signIn" }> = Object.fromEntries(formData.entries()) as any;
+function makeOnSignInSubmit(handleLoginAction: (formData: FormData) => Promise<any>) {
+    return async function onSignInSubmit(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        disableEmptyInputs(event);
+        const formData = new FormData(event.currentTarget);
+        const entries: Extract<LoginInfo<"client">, { tab: "signIn" }> = Object.fromEntries(formData.entries()) as any;
 
-    const saltResp = await postSalt({
-        body: { username: entries.username }
-    });
+        const saltResp = await postSalt({
+            body: { username: entries.username }
+        });
 
-    if (saltResp.kind != "Success") {
-        toast.error(`Failed to obtain the salt for user ${entries.username}. Error: ${saltResp.kind}`);
-        return false;
+        console.log(`Received salt response for user ${entries.username}:`, saltResp);
+
+        if (saltResp.kind != "Success") {
+            toast.error(`Failed to obtain the salt for user ${entries.username}. Error: ${saltResp.kind}`);
+            return false;
+        }
+
+        console.log(`Hashing password for user ${entries.username} with received salt.`);
+
+        const hashResult: Argon2BrowserHashResult = await argon2.hash({
+            ...argon2Opts,
+            pass: entries.password,
+            salt: saltResp.salt,
+        });
+
+        console.log(`Received hash result for user ${entries.username}:`, hashResult);
+
+        const modifiedEntries: Extract<LoginInfo<"server">, { tab: "signIn" }> = {
+            tab: entries.tab,
+            username: entries.username,
+            password_hash: hashResult.encoded,
+        };
+
+        const modifiedFormData = new FormData();
+
+        for (const [key, value] of Object.entries(modifiedEntries)) {
+            modifiedFormData.append(key, value);
+        }
+
+        startTransition(() => {
+            handleLoginAction(modifiedFormData);
+        });
     }
-
-    const hashResult: Argon2BrowserHashResult = await argon2.hash({
-        ...argon2Opts,
-        pass: entries.password,
-        salt: saltResp.salt,
-    });
-
-    const modifiedEntries: Extract<LoginInfo<"server">, { tab: "signIn" }> = {
-        tab: entries.tab,
-        username: entries.username,
-        password_hash: hashResult.encoded,
-    };
-
-    const modifiedFormData = new FormData();
-
-    for (const [key, value] of Object.entries(modifiedEntries)) {
-        modifiedFormData.append(key, value);
-    }
-
-    return modifiedFormData;
 }
 
 
-function makeSignUpSubmit(handleLoginAction: (formData: FormData) => Promise<any>) {
+function makeOnSignUpSubmit(handleLoginAction: (formData: FormData) => Promise<any>) {
     return async function onSignUpSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
         disableEmptyInputs(event);
@@ -181,12 +192,13 @@ export default function LoginForm() {
                     <Form
                         action={handleLoginAction}
                         className="flex flex-col gap-4"
-                        onSubmit={onSignInSubmit}
+                        onSubmit={makeOnSignInSubmit(async (formData) => await handleLoginAction(formData))}
                     >
                         <input type="hidden" name="tab" value={loginInfo.tab} />
                         <input
                             type="text"
                             placeholder="Username"
+                            autoComplete="username"
                             className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             name="username"
                             minLength={MIN_USERNAME_LENGTH}
@@ -216,7 +228,7 @@ export default function LoginForm() {
                         <Form
                             action={handleLoginAction}
                             className="flex flex-col gap-4"
-                            onSubmit={makeSignUpSubmit(async (formData) => await handleLoginAction(formData))}
+                            onSubmit={makeOnSignUpSubmit(async (formData) => await handleLoginAction(formData))}
                         >
                             <input type="hidden" name="tab" value={loginInfo.tab} />
                             <input
@@ -224,6 +236,7 @@ export default function LoginForm() {
                                 placeholder="Username"
                                 className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 name="username"
+                                autoComplete="username"
                                 minLength={MIN_USERNAME_LENGTH}
                                 maxLength={MAX_USERNAME_LENGTH}
                                 required

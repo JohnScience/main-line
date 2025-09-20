@@ -52,12 +52,12 @@ const loginInfoSchema = z.union([
     z.object({
         tab: z.literal("signIn"),
         username: z.string().min(MIN_USERNAME_LENGTH).max(MAX_USERNAME_LENGTH),
-        password_hash: z.string().min(MIN_PASSWORD_LENGTH).max(MAX_PASSWORD_LENGTH),
+        password_hash: z.string(),
     }),
     z.object({
         tab: z.literal("signUp"),
         username: z.string().min(MIN_USERNAME_LENGTH).max(MAX_USERNAME_LENGTH),
-        password_hash: z.string().min(MIN_PASSWORD_LENGTH).max(MAX_PASSWORD_LENGTH),
+        password_hash: z.string(),
         chessDotComUsername: z.string().superRefine(makeOptionalFieldLengthCheckRefinement(
             "chessDotComUsername",
             MIN_CHESS_DOT_COM_USERNAME_LENGTH,

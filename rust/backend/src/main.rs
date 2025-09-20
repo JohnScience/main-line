@@ -12,7 +12,7 @@ async fn main() -> anyhow::Result<()> {
 
     let ctx = Context::new().await?;
 
-    let app = make_router(ctx);
+    let app = make_router(ctx)?;
 
     info!("Serving the app...");
 

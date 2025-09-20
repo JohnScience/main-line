@@ -29,6 +29,7 @@ services:
       <<: *database-env
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
+      BASE_FRONTEND_URL: http://localhost:3001
       RUST_LOG: "backend=trace"
     ports:
       - "3000:3000"

@@ -32,12 +32,18 @@ impl PgEnv {
 
 #[derive(Debug, Clone)]
 pub struct Env {
+    pub base_frontend_url: String,
     pub pg: PgEnv,
 }
 
 impl Env {
     pub(crate) fn from_env() -> anyhow::Result<Self> {
         let pg = PgEnv::from_env()?;
-        Ok(Env { pg })
+        let base_frontend_url =
+            env::var("BASE_FRONTEND_URL").context("Missing BASE_FRONTEND_URL")?;
+        Ok(Env {
+            pg,
+            base_frontend_url,
+        })
     }
 }

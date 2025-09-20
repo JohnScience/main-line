@@ -23,7 +23,6 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "base64-loader": "^1.0.0",
-    "copy-webpack-plugin": "^13.0.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
