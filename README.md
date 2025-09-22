@@ -25,6 +25,12 @@ Once you have the dependencies installed, follow these steps:
 * Clone the repository to your local machine.
 * Navigate to the project directory.
 
+* Generate the secret files using the Python script:
+
+```bash
+python -m scripts.generate_secrets
+```
+
 * Build the intermediate Docker images using the Python script:
 
 ```bash

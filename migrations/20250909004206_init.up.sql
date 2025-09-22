@@ -1,4 +1,5 @@
--- Add up Postgres migration script here
+-- Create custom enum type for user roles
+CREATE TYPE role AS ENUM ('user', 'admin');
 
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
@@ -7,5 +8,6 @@ CREATE TABLE IF NOT EXISTS users (
     lichess_username VARCHAR(50) UNIQUE,
     chess_dot_com_username VARCHAR(50) UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    role role NOT NULL DEFAULT 'user'
 );

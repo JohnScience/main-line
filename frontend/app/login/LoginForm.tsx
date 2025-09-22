@@ -3,14 +3,16 @@
 import { z } from "zod/v4";
 import { FormEvent, startTransition, useActionState, useEffect, useState } from "react";
 import Form from "next/form";
-import { handleLogin } from "./actions";
+import { handleClientLoginAttempt } from "./actions";
 import { Toaster, toast } from "sonner";
 import { MAX_CHESS_DOT_COM_USERNAME_LENGTH, MAX_LICHESS_USERNAME_LENGTH, MAX_PASSWORD_LENGTH, MAX_USERNAME_LENGTH, MIN_CHESS_DOT_COM_USERNAME_LENGTH, MIN_LICHESS_USERNAME_LENGTH, MIN_PASSWORD_LENGTH, MIN_USERNAME_LENGTH } from "./config";
 import { LoginError } from "./shared";
 import argon2 from "argon2-browser/dist/argon2-bundled.min.js";
 import type { Argon2BrowserHashOptions, Argon2BrowserHashResult } from "argon2-browser";
 import { postSalt } from "api-client";
-import { OptionalKeys, OptionalProps } from "../_util/types";
+import { OptionalKeys } from "../_util/types";
+import { jwtDecode } from "jwt-decode";
+import { JwtClaims } from "api-client/build/gen_shared_types";
 
 type PasswordFragment<T extends "client" | "server"> = T extends "client" ? { password: string } : { password_hash: string };
 
@@ -145,13 +147,16 @@ export default function LoginForm() {
     const [loginInfo, setLoginInfo] = useState<Partial<LoginInfo<"client">> & { tab: LoginTab }>({
         tab: "signIn",
     });
-    const [loginOutcome, handleLoginAction, isLoginPending] = useActionState(handleLogin, undefined);
+    const [loginOutcome, handleLoginAction, isLoginPending] = useActionState(handleClientLoginAttempt, undefined);
     useEffect(() => {
         if (loginOutcome !== undefined) {
             console.log('loginOutcome:', loginOutcome);
             // Handle the login outcome (success or error)
-            if (loginOutcome.kind === "success") {
+            if (loginOutcome.kind === "Success") {
                 toast.success("Login successful!");
+                console.log(loginOutcome.jwt);
+                const claims = jwtDecode<JwtClaims>(loginOutcome.jwt);
+                console.log('Decoded JWT claims:', claims);
             } else {
                 toast.error(`Login failed: ${loginOutcome.error}`);
             }

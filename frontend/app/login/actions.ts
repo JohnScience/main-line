@@ -4,7 +4,11 @@ import { z } from "zod/v4";
 import { MAX_CHESS_DOT_COM_USERNAME_LENGTH, MAX_LICHESS_USERNAME_LENGTH, MAX_PASSWORD_LENGTH, MAX_USERNAME_LENGTH, MIN_CHESS_DOT_COM_USERNAME_LENGTH, MIN_LICHESS_USERNAME_LENGTH, MIN_PASSWORD_LENGTH, MIN_USERNAME_LENGTH } from "./config";
 import { LoginInfo } from "./LoginForm";
 import { LoginError } from "./shared";
-import { postRegister } from "api-client";
+import { postLogin, postRegister } from "api-client";
+import { JwtClaims, JwtString } from "api-client/build/gen_shared_types";
+import { cookies } from "next/headers";
+import { jwtDecode } from "jwt-decode";
+import { redirect } from "next/navigation";
 
 // This function creates a Zod refinement function that checks the length of an optional field
 // submitted through a form. Sadly, Next.js's `<Form>` component submits empty optional fields as empty strings.
@@ -72,42 +76,86 @@ const loginInfoSchema = z.union([
 ]) satisfies z.ZodType<LoginInfo<"server">>;
 
 export type LoginOutcome = {
-    kind: "success";
+    kind: "Success";
+    jwt: JwtString;
 } | {
-    kind: "error";
+    kind: "Error";
     error: LoginError;
 }
 
+async function handleSuccessfulLogin(
+    jwt: JwtString,
+): Promise<{ kind: "Success"; jwt: JwtString; }> {
+    const ret = { kind: "Success", jwt } as const;
+    const claims = jwtDecode<JwtClaims>(jwt);
+    let exp: number | undefined = undefined;
+    if (BigInt(Number.MAX_SAFE_INTEGER) > BigInt(claims.exp as any)) {
+        exp = Number(claims.exp);
+    } else {
+        console.warn("JWT exp claim is too large to be represented as a JavaScript number.");
+    }
+    (await cookies()).set("access_token", jwt, {
+        expires: new Date().setUTCMilliseconds(exp ?? 0)
+    });
+    return ret;
+}
+
+async function performServerLoginAttempt(loginInfo: LoginInfo<"server">): Promise<LoginOutcome> {
+    const res = await postLogin({
+        body: {
+            username: loginInfo.username,
+            password_hash: loginInfo.password_hash,
+        }
+    });
+    switch (res.kind) {
+        case "Success": return handleSuccessfulLogin(res.jwt);
+        case "InvalidCredentials": {
+            if (loginInfo.tab === "signUp") {
+                console.error("Just registered user, but got invalid credentials when trying to log in.");
+            }
+            return { kind: "Error", error: LoginError.INVALID_CREDENTIALS };
+        };
+        case "InternalServerError": return { kind: "Error", error: LoginError.INTERNAL_SERVER_ERROR };
+    };
+}
+
 // Handles both signing in and signing up.
-export async function handleLogin(previousState: unknown, loginFormData: FormData): Promise<LoginOutcome> {
+export async function handleClientLoginAttempt(previousState: unknown, loginFormData: FormData): Promise<LoginOutcome> {
     const formObj = Object.fromEntries(loginFormData.entries());
     const loginInfoRes: z.ZodSafeParseResult<LoginInfo<"server">> = loginInfoSchema.safeParse(formObj);
 
     if (!loginInfoRes.success) {
         console.error(loginInfoRes.error.issues);
-        return { kind: "error", error: LoginError.INVALID_FORM_OBJECT };
+        return { kind: "Error", error: LoginError.INVALID_FORM_OBJECT };
     }
 
-    if (loginInfoRes.data.tab === "signUp") {
-        const res = await postRegister({
-            body: {
-                username: loginInfoRes.data.username,
-                password_hash: loginInfoRes.data.password_hash,
+    if ((await cookies()).get("access_token")?.value) {
+        const ret = { kind: "Error", error: LoginError.ALREADY_LOGGED_IN };
+        console.error(`User ${loginInfoRes.data.username} is already logged in.`);
+        // TODO: navigate to their page
+        redirect("/")
+    }
+
+    switch (loginInfoRes.data.tab) {
+        case "signUp": {
+            const registrationResult = await postRegister({
+                body: {
+                    username: loginInfoRes.data.username,
+                    password_hash: loginInfoRes.data.password_hash,
+                }
+            });
+
+            switch (registrationResult) {
+                case "Success":
+                    break;
+                case "AlreadyExists":
+                    return { kind: "Error", error: LoginError.USER_ALREADY_EXISTS };
+                case "InternalServerError":
+                    return { kind: "Error", error: LoginError.INTERNAL_SERVER_ERROR };
             }
-        });
 
-        console.log('postRegister result:', res);
-
-        switch (res) {
-            case "Success":
-                return { kind: "success" };
-            case "AlreadyExists":
-                return { kind: "error", error: LoginError.USER_ALREADY_EXISTS };
-            case "InternalServerError":
-                return { kind: "error", error: LoginError.INTERNAL_SERVER_ERROR };
+            return performServerLoginAttempt(loginInfoRes.data);
         }
-    } else {
-        // TODO: handle sign in
-        return { kind: "error", error: LoginError.INTERNAL_SERVER_ERROR }
-    }
+        case "signIn": return performServerLoginAttempt(loginInfoRes.data);
+    };
 }

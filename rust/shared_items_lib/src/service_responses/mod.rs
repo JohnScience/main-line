@@ -1,3 +1,5 @@
+use crate::JwtString;
+
 /// Responses for user registration
 #[derive(specta::Type)]
 pub enum PostRegisterResponse {
@@ -10,7 +12,23 @@ pub enum PostRegisterResponse {
 }
 
 #[derive(specta::Type, serde::Serialize, utoipa::ToSchema)]
-pub struct SaltResponseSuccess {
+pub struct PostLoginResponseSuccess {
+    pub jwt: JwtString,
+}
+
+#[derive(specta::Type)]
+#[serde(tag = "kind")]
+pub enum PostLoginResponse {
+    /// Login successful
+    Success(PostLoginResponseSuccess),
+    /// Invalid credentials
+    InvalidCredentials,
+    /// Internal server error
+    InternalServerError,
+}
+
+#[derive(specta::Type, serde::Serialize, utoipa::ToSchema)]
+pub struct PostSaltResponseSuccess {
     pub salt: String,
 }
 
@@ -19,7 +37,7 @@ pub struct SaltResponseSuccess {
 #[serde(tag = "kind")]
 pub enum PostSaltResponse {
     /// Salt retrieved successfully
-    Success(SaltResponseSuccess),
+    Success(PostSaltResponseSuccess),
     /// User not found
     UserNotFound,
     /// Internal server error

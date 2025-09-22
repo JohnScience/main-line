@@ -34,6 +34,7 @@ impl PgEnv {
 pub struct Env {
     pub base_frontend_url: String,
     pub pg: PgEnv,
+    pub jwt_signing_key: String,
 }
 
 impl Env {
@@ -41,9 +42,11 @@ impl Env {
         let pg = PgEnv::from_env()?;
         let base_frontend_url =
             env::var("BASE_FRONTEND_URL").context("Missing BASE_FRONTEND_URL")?;
+        let jwt_signing_key = env::var("JWT_SIGNING_KEY").context("Missing JWT_SIGNING_KEY")?;
         Ok(Env {
             pg,
             base_frontend_url,
+            jwt_signing_key,
         })
     }
 }

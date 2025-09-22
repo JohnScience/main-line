@@ -1,13 +1,18 @@
 import {
+    PostLoginErrors,
+    PostLoginResponses,
     PostRegisterErrors, PostRegisterResponses,
     PostSaltErrors, PostSaltResponses,
 } from "./gen-client";
 import { Config, createClient as createClientInner } from "./gen-client/client";
 import {
     postRegister as postRegisterInner,
-    postSalt as postSaltInner
+    postSalt as postSaltInner,
+    postLogin as postLoginInner,
 } from "./gen-client/sdk.gen";
-import { PostRegisterResponse, PostSaltResponse } from "./gen_shared_types";
+import { PostLoginResponse, PostRegisterResponse, PostSaltResponse } from "./gen_shared_types";
+
+export * as "gen_shared_types" from "./gen_shared_types";
 
 export function createClient(config: Config = {}): ReturnType<typeof createClientInner> {
     if (!config.baseUrl) {
@@ -43,4 +48,20 @@ export async function postSalt(options: Parameters<typeof postSaltInner>[0]): Pr
         case 404: return { "kind": "UserNotFound" };
         case 500: return { "kind": "InternalServerError" };
     };
+}
+
+export async function postLogin(options: Parameters<typeof postLoginInner>[0]): Promise<PostLoginResponse> {
+    if (!options.client) {
+        options.client = createClient();
+    }
+    const result = await postLoginInner(options);
+    const statusCode = result.response.status as keyof PostLoginResponses | keyof PostLoginErrors;
+    switch (statusCode) {
+        case 200: {
+            const loginResponseSuccess: PostLoginResponses[200] = result.data!;
+            return { "kind": "Success", "jwt": loginResponseSuccess.jwt };
+        }
+        case 401: return { "kind": "InvalidCredentials" };
+        case 500: return { "kind": "InternalServerError" };
+    }
 }

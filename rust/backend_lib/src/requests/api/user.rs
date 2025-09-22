@@ -9,7 +9,8 @@ use axum::{
 };
 
 use shared_items_lib::service_responses::{
-    PostRegisterResponse, PostSaltResponse, SaltResponseSuccess,
+    PostLoginResponse, PostLoginResponseSuccess, PostRegisterResponse, PostSaltResponse,
+    PostSaltResponseSuccess,
 };
 
 use crate::context::Context;
@@ -43,10 +44,32 @@ async fn post_register(
 
 #[utoipa::path(
     post,
+    path = "/api/user/login",
+    tag = "user",
+    responses(
+        (status = 200, description = "Login successful", body = PostLoginResponseSuccess),
+        (status = 401, description = "Invalid credentials", body = ()),
+        (status = 500, description = "Internal server error", body = ()),
+    ),
+    request_body = service::user::LoginRequest,
+)]
+async fn post_login(
+    State(ctx): State<Context>,
+    Json(request): Json<service::user::LoginRequest>,
+) -> Response {
+    match service::user::login(&ctx, request).await {
+        PostLoginResponse::Success(resp) => (StatusCode::OK, Json(resp)).into_response(),
+        PostLoginResponse::InvalidCredentials => StatusCode::UNAUTHORIZED.into_response(),
+        PostLoginResponse::InternalServerError => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+#[utoipa::path(
+    post,
     path = "/api/user/salt",
     tag = "user",
     responses(
-        (status = 200, description = "User salt retrieved successfully", body = SaltResponseSuccess),
+        (status = 200, description = "User salt retrieved successfully", body = PostSaltResponseSuccess),
         (status = 404, description = "User not found", body = ()),
         (status = 500, description = "Internal server error", body = ()),
     ),
@@ -66,6 +89,7 @@ async fn post_salt(
 fn user_routes() -> Router<Context> {
     Router::new()
         .route("/register", post(post_register))
+        .route("/login", post(post_login))
         .route("/salt", post(post_salt))
 }
 
