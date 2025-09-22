@@ -1,11 +1,22 @@
-import TopNavBar from "./_components/TopNavBar";
-import Footer from "./_components/Footer";
+"use server";
 
-export default function Home() {
+import { cookies } from "next/headers";
+
+import TopNavBar from "@/app/_components/TopNavBar";
+import Footer from "@/app/_components/Footer";
+import { Cookies } from "@/app/_util/cookies";
+
+export default async function Home() {
+  const cookieStore = await cookies();
+  const accessToken = cookieStore.get(Cookies.ACCESS_TOKEN);
+  console.log("Access token:", accessToken);
+  const loggedIn = !!accessToken;
+  console.log("Logged in:", loggedIn);
+
   return (
     <div className="font-sans grid grid-rows-[auto_1fr_20px] items-center justify-items-center min-h-screen">
       {/* Navigation Bar */}
-      <TopNavBar />
+      <TopNavBar userInfo={{ loggedIn }} />
 
       {/* Main Content */}
       <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start p-8 sm:p-20">

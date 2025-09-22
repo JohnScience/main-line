@@ -1,18 +1,22 @@
 "use client";
 
-import { z } from "zod/v4";
-import { FormEvent, startTransition, useActionState, useEffect, useState } from "react";
 import Form from "next/form";
-import { handleClientLoginAttempt } from "./actions";
+
+import { FormEvent, startTransition, useActionState, useEffect, useState } from "react";
+
 import { Toaster, toast } from "sonner";
-import { MAX_CHESS_DOT_COM_USERNAME_LENGTH, MAX_LICHESS_USERNAME_LENGTH, MAX_PASSWORD_LENGTH, MAX_USERNAME_LENGTH, MIN_CHESS_DOT_COM_USERNAME_LENGTH, MIN_LICHESS_USERNAME_LENGTH, MIN_PASSWORD_LENGTH, MIN_USERNAME_LENGTH } from "./config";
-import { LoginError } from "./shared";
-import argon2 from "argon2-browser/dist/argon2-bundled.min.js";
 import type { Argon2BrowserHashOptions, Argon2BrowserHashResult } from "argon2-browser";
-import { postSalt } from "api-client";
-import { OptionalKeys } from "../_util/types";
+import argon2 from "argon2-browser/dist/argon2-bundled.min.js";
 import { jwtDecode } from "jwt-decode";
+
+import { postSalt } from "api-client";
 import { JwtClaims } from "api-client/build/gen_shared_types";
+
+import { OptionalKeys } from "@/app/_util/types";
+import { base64ToUint8Array } from "@/app/_util/base64";
+
+import { handleClientLoginAttempt } from "./actions";
+import { MAX_CHESS_DOT_COM_USERNAME_LENGTH, MAX_LICHESS_USERNAME_LENGTH, MAX_PASSWORD_LENGTH, MAX_USERNAME_LENGTH, MIN_CHESS_DOT_COM_USERNAME_LENGTH, MIN_LICHESS_USERNAME_LENGTH, MIN_PASSWORD_LENGTH, MIN_USERNAME_LENGTH } from "./config";
 
 type PasswordFragment<T extends "client" | "server"> = T extends "client" ? { password: string } : { password_hash: string };
 
@@ -34,8 +38,6 @@ export type LoginInfo<T extends "client" | "server"> = BaseLoginInfo<T> & (
         tab: "signUp"
     } & OptionalSignupFields
 );
-
-const loginErrorSchema: z.ZodEnum<typeof LoginError> = z.enum(LoginError);
 
 const argon2Opts: Omit<Argon2BrowserHashOptions, "pass" | "salt"> = {
     time: 1,
@@ -76,10 +78,12 @@ function makeOnSignInSubmit(handleLoginAction: (formData: FormData) => Promise<a
 
         console.log(`Hashing password for user ${entries.username} with received salt.`);
 
+        const salt: Uint8Array = base64ToUint8Array(saltResp.salt);
+
         const hashResult: Argon2BrowserHashResult = await argon2.hash({
             ...argon2Opts,
             pass: entries.password,
-            salt: saltResp.salt,
+            salt,
         });
 
         console.log(`Received hash result for user ${entries.username}:`, hashResult);
@@ -110,10 +114,12 @@ function makeOnSignUpSubmit(handleLoginAction: (formData: FormData) => Promise<a
         const formData = new FormData(event.currentTarget);
         const entries: Extract<LoginInfo<"client">, { tab: "signUp" }> = Object.fromEntries(formData.entries()) as any;
 
+        const salt = crypto.getRandomValues(new Uint8Array(16));
+
         const res: Argon2BrowserHashResult = await argon2.hash({
             ...argon2Opts,
             pass: entries.password,
-            salt: crypto.getRandomValues(new Uint8Array(16))
+            salt,
         });
 
         const modifiedEntries: Extract<LoginInfo<"server">, { tab: "signUp" }> = {

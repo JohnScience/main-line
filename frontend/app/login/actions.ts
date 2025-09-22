@@ -1,14 +1,19 @@
 "use server";
 
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+
 import { z } from "zod/v4";
+import { jwtDecode } from "jwt-decode";
+
+import { postLogin, postRegister } from "api-client";
+import { JwtClaims, JwtString } from "api-client/build/gen_shared_types";
+
+import { Cookies } from "@/app/_util/cookies";
+
 import { MAX_CHESS_DOT_COM_USERNAME_LENGTH, MAX_LICHESS_USERNAME_LENGTH, MAX_PASSWORD_LENGTH, MAX_USERNAME_LENGTH, MIN_CHESS_DOT_COM_USERNAME_LENGTH, MIN_LICHESS_USERNAME_LENGTH, MIN_PASSWORD_LENGTH, MIN_USERNAME_LENGTH } from "./config";
 import { LoginInfo } from "./LoginForm";
 import { LoginError } from "./shared";
-import { postLogin, postRegister } from "api-client";
-import { JwtClaims, JwtString } from "api-client/build/gen_shared_types";
-import { cookies } from "next/headers";
-import { jwtDecode } from "jwt-decode";
-import { redirect } from "next/navigation";
 
 // This function creates a Zod refinement function that checks the length of an optional field
 // submitted through a form. Sadly, Next.js's `<Form>` component submits empty optional fields as empty strings.
@@ -94,7 +99,8 @@ async function handleSuccessfulLogin(
     } else {
         console.warn("JWT exp claim is too large to be represented as a JavaScript number.");
     }
-    (await cookies()).set("access_token", jwt, {
+    const cookieStore = await cookies();
+    cookieStore.set(Cookies.ACCESS_TOKEN, jwt, {
         expires: new Date().setUTCMilliseconds(exp ?? 0)
     });
     return ret;
@@ -129,7 +135,9 @@ export async function handleClientLoginAttempt(previousState: unknown, loginForm
         return { kind: "Error", error: LoginError.INVALID_FORM_OBJECT };
     }
 
-    if ((await cookies()).get("access_token")?.value) {
+    const cookieStore = await cookies();
+
+    if (cookieStore.get(Cookies.ACCESS_TOKEN)?.value) {
         const ret = { kind: "Error", error: LoginError.ALREADY_LOGGED_IN };
         console.error(`User ${loginInfoRes.data.username} is already logged in.`);
         // TODO: navigate to their page

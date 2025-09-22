@@ -137,7 +137,20 @@ pub(crate) async fn check_credentials(
             password_hash: stored_hash,
             role,
         })) if stored_hash == password_hash => check_credentials::Output::Valid { user_id, role },
-        Ok(Some(_)) => check_credentials::Output::WrongPassword,
+        Ok(Some(check_credentials::User {
+            id: user_id,
+            password_hash: stored_hash,
+            role: _,
+        })) => {
+            error!(
+                "The function {mod_path}::{fn_name}(...) failed: wrong password for user with ID {user_id}.\n\
+                Provided hash: {password_hash}\n\
+                Stored hash:   {stored_hash}",
+                mod_path = module_path!(),
+                fn_name = stringify!(check_credentials),
+            );
+            check_credentials::Output::WrongPassword
+        }
         Ok(None) => check_credentials::Output::UserNotFound,
         Err(err) => check_credentials::Output::DbError { err },
     };
@@ -171,7 +184,7 @@ pub(crate) async fn check_credentials(
 
 pub(crate) mod get_password_hash {
     /// See <https://docs.rs/argon2/0.5.3/argon2/struct.PasswordHash.html>
-    #[derive(sqlx::Type)]
+    #[derive(sqlx::Type, derive_more::Display)]
     #[sqlx(transparent)]
     pub(crate) struct PHCString(pub(in crate::db) String);
 

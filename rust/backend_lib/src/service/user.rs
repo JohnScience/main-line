@@ -124,6 +124,14 @@ pub(crate) async fn salt(ctx: &Context, request: SaltRequest) -> PostSaltRespons
     let Some(ref hash) = hash else {
         return PostSaltResponse::UserNotFound;
     };
+
+    tracing::trace!(
+        "The function {mod_path}::{fn_name}(...) progress: retrieved password hash for user {username}. Hash: {hash}",
+        mod_path = module_path!(),
+        fn_name = stringify!(salt),
+        username = username,
+    );
+
     let hash: argon2::PasswordHash = match hash.try_into() {
         Ok(hash) => hash,
         Err(e) => {
@@ -148,5 +156,12 @@ pub(crate) async fn salt(ctx: &Context, request: SaltRequest) -> PostSaltRespons
     };
 
     let salt = salt.as_str().to_string();
+
+    tracing::trace!(
+        "The function {mod_path}::{fn_name}(...) succeeded: retrieved salt for user {username}. Salt: {salt}",
+        mod_path = module_path!(),
+        fn_name = stringify!(salt),
+    );
+
     PostSaltResponse::Success(PostSaltResponseSuccess { salt })
 }

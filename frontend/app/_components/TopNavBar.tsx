@@ -1,19 +1,42 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
+
+import { useState } from "react";
+
+import { Optional } from "@/app/_util/types";
 import { CONTACT_EMAIL } from "@/app/config";
+import { LogoutButton } from "./LogoutButton";
+
+export interface UserInfo {
+    loggedIn: boolean;
+    avatarSource: string;
+}
 
 interface Props {
+    userInfo?: Optional<UserInfo, "avatarSource">;
     contactEmail?: string;
     logoWidth?: number;
     logoHeight?: number;
 }
 
+const DEFAULT_USER_INFO: UserInfo = {
+    loggedIn: false,
+    avatarSource: "/account.svg",
+};
+
 export default function TopNavBar(
-    { contactEmail, logoWidth, logoHeight }: Props
+    { contactEmail, logoWidth, logoHeight, userInfo: initUserInfo }: Props
 ) {
+    initUserInfo = initUserInfo ?? DEFAULT_USER_INFO;
+    initUserInfo.avatarSource = initUserInfo.avatarSource ?? "/account.svg";
+
     logoWidth = logoWidth ?? 120;
     logoHeight = logoHeight ?? 30;
     contactEmail = contactEmail ?? CONTACT_EMAIL;
+
+    const [userInfo, setUserInfo] = useState(initUserInfo as UserInfo);
 
     return (
         <>
@@ -48,19 +71,35 @@ export default function TopNavBar(
                     >
                         Contact
                     </a>
-                    <a
-                        className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-                        href="/login"
-                    >
-                        Log In
-                        <Image
-                            aria-hidden
-                            src="/account.svg"
-                            alt="Account icon"
-                            width={32}
-                            height={32}
-                        />
-                    </a>
+                    {
+                        !userInfo.loggedIn ?
+                            <a
+                                className="flex items-center gap-2 hover:underline hover:underline-offset-4"
+                                href="/login"
+                            >
+                                Log In
+                                <Image
+                                    aria-hidden
+                                    src={userInfo.avatarSource}
+                                    alt="Account icon"
+                                    width={32}
+                                    height={32}
+                                />
+                            </a>
+                            :
+                            <LogoutButton
+                                onLogout={() => setUserInfo(DEFAULT_USER_INFO)}
+                            >
+                                Logout
+                                <Image
+                                    aria-hidden
+                                    src={userInfo.avatarSource}
+                                    alt="Account icon"
+                                    width={32}
+                                    height={32}
+                                />
+                            </LogoutButton>
+                    }
                 </div >
             </nav >
         </>
