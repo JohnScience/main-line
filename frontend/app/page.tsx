@@ -9,9 +9,7 @@ import { Cookies } from "@/app/_util/cookies";
 export default async function Home() {
   const cookieStore = await cookies();
   const accessToken = cookieStore.get(Cookies.ACCESS_TOKEN);
-  console.log("Access token:", accessToken);
   const loggedIn = !!accessToken;
-  console.log("Logged in:", loggedIn);
 
   return (
     <div className="font-sans grid grid-rows-[auto_1fr_20px] items-center justify-items-center min-h-screen">

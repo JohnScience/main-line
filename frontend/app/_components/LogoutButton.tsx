@@ -14,9 +14,6 @@ type LogoutButtonProps = {
 export function LogoutButton({ children, onLogout }: LogoutButtonProps) {
 
     async function logout() {
-        const allCookies = await window.cookieStore.getAll();
-        console.log(allCookies);
-
         // At the time of writing,
         // CookieStore API has 90% support, according to
         // https://caniuse.com/cookie-store-api

@@ -2,9 +2,12 @@
 
 import { cookies } from "next/headers";
 
+import React from "react";
+
 import Footer from "@/app/_components/Footer";
 import TopNavBar from "@/app/_components/TopNavBar";
 import { Cookies } from "@/app/_util/cookies";
+import Chessboard from "./Chessboard";
 
 type UserPageProps = {
     params: Promise<{
@@ -24,7 +27,7 @@ export default async function UserPage({ params }: UserPageProps) {
             <TopNavBar userInfo={{ loggedIn }} />
             {/* Main Content */}
             <main>
-                <h1>User Profile for user with id {userId}</h1>
+                <Chessboard />
                 {/* Render user information */}
             </main>
             {/* Footer */}

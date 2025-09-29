@@ -10,6 +10,8 @@
   "dependencies": {
     "api-client": "file:../api-client",
     "argon2-browser": "^1.18.0",
+    "chess.js": "^1.4.0",
+    "cm-chessboard": "^8.10.1",
     "jwt-decode": "^4.0.0",
     "next": "15.5.2",
     "react": "19.1.0",
@@ -20,11 +22,15 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/argon2-browser": "^1.18.4",
+    "@types/chess.js": "^0.13.7",
+    "@types/cm-chessboard": "git://github.com/JohnScience/types-cm-chessboard.git#c0397c2",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "base64-loader": "^1.0.0",
+    "copy-webpack-plugin": "^13.0.1",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "webpack-manifest-plugin": "^5.0.1"
   }
 }
