@@ -55,7 +55,7 @@ export default function TopNavBar(
                 </div >
 
                 {/* Right side (optional links or buttons) */}
-                < div className="flex items-center gap-6 text-sm font-medium" >
+                <div className="flex items-center gap-6 text-sm font-medium" >
                     <Link href="/" className="hover:underline hover:underline-offset-4">Home</Link>
                     { /*
                 <a
@@ -65,6 +65,7 @@ export default function TopNavBar(
                     About
                 </a>
                 */ }
+                    <Link href="/same-device" className="hover:underline hover:underline-offset-4">Play</Link>
                     <a
                         href={`mailto:${contactEmail}`}
                         className="hover:underline hover:underline-offset-4"
