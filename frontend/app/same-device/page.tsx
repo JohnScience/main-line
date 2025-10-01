@@ -7,6 +7,7 @@ import React from "react";
 import Footer from "@/app/_components/Footer";
 import TopNavBar from "@/app/_components/TopNavBar";
 import { Cookies } from "@/app/_util/cookies";
+
 import Chessboard from "./Chessboard";
 
 type UserPageProps = {
@@ -26,7 +27,7 @@ export default async function UserPage({ params }: UserPageProps) {
             {/* Navigation Bar */}
             <TopNavBar userInfo={{ loggedIn }} />
             {/* Main Content */}
-            <main>
+            <main className="flex items-center justify-center">
                 <Chessboard />
                 {/* Render user information */}
             </main>
