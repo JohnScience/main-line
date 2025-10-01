@@ -1,6 +1,11 @@
 "use server";
 
 import { cookies } from "next/headers";
+import Image from "next/image";
+
+import { jwtDecode } from "jwt-decode";
+
+import { JwtClaims, UserId } from "api-client/build/gen_shared_types";
 
 import Footer from "@/app/_components/Footer";
 import TopNavBar from "@/app/_components/TopNavBar";
@@ -12,20 +17,75 @@ type UserPageProps = {
     }>
 };
 
+interface UserInfo {
+    avatarUrl?: string;
+    username: string;
+    id: UserId;
+    email?: string;
+    chessDotComProfile?: string;
+    lichessDotOrgProfile?: string;
+}
+
 export default async function UserPage({ params }: UserPageProps) {
-    const { userId } = await params;
+    const { userId: viewedUserId } = await params;
     const cookieStore = await cookies();
     const accessToken = cookieStore.get(Cookies.ACCESS_TOKEN);
+    let viewingUserId: UserId | null = null;
+    if (accessToken) {
+        const jwt = jwtDecode<JwtClaims>(accessToken.value);
+        viewingUserId = jwt.sub;
+    }
     const loggedIn = !!accessToken;
+
+    let userInfo: UserInfo | null = {
+        // avatarUrl: `/api/users/${viewedUserId}/avatar`, // Example avatar URL
+        username: `HardcodedName`,
+        id: parseInt(viewedUserId)
+    };
 
     return (
         <div className="font-sans grid grid-rows-[auto_1fr_auto] justify-items-center min-h-screen">
             {/* Navigation Bar */}
             <TopNavBar userInfo={{ loggedIn }} />
             {/* Main Content */}
-            <main>
-                <h1>User Profile for user with id {userId}</h1>
-                {/* Render user information */}
+            <main className="p-10 w-full">
+                { /* User Profile Information */}
+                <div className="min-h-[300px] w-full bg-blue-100 rounded-lg grid grid-cols-[275px_auto] items-center">
+                    <Image
+                        // src={`/api/users/${viewedUserId}/avatar`}
+                        src={userInfo?.avatarUrl || "/account.svg"}
+                        alt="User Avatar"
+                        width={150}
+                        height={150}
+                        className="rounded-full w-full h-full object-cover"
+                    />
+                    {/* Textual Information */}
+                    <div className="h-full p-6">
+                        <h2 className="text-2xl font-bold text-gray-800 mb-4">{`${userInfo?.id == viewingUserId ? "Your" : `${userInfo?.username}'s`} Profile`}</h2>
+                        <div className="space-y-3">
+                            <div>
+                                <span className="font-semibold text-gray-600">Username:</span>
+                                <span className="ml-2 text-gray-800">{userInfo?.username}</span>
+                            </div>
+                            <div>
+                                <span className="font-semibold text-gray-600">ID:</span>
+                                <span className="ml-2 text-gray-800">{userInfo?.id}</span>
+                            </div>
+                            <div>
+                                <span className="font-semibold text-gray-600">Email:</span>
+                                <span className="ml-2 text-gray-800">{userInfo?.email || "No email provided"}</span>
+                            </div>
+                            <div>
+                                <span className="font-semibold text-gray-600">Chess.com Profile:</span>
+                                <span className="ml-2 text-gray-800">{userInfo?.chessDotComProfile || "No profile linked"}</span>
+                            </div>
+                            <div>
+                                <span className="font-semibold text-gray-600">Lichess.org Profile:</span>
+                                <span className="ml-2 text-gray-800">{userInfo?.lichessDotOrgProfile || "No profile linked"}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </main>
             {/* Footer */}
             <Footer />
