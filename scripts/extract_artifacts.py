@@ -1,3 +1,6 @@
+import os
+import pathlib
+import shutil
 import sys
 
 from scripts.common.docker_images import DOCKER_IMAGES, PurposeSpecificDataVariant, extract_artifact
@@ -37,5 +40,14 @@ if __name__ == "__main__":
         if bool(set(img["purpose_specific_data"].dest) & SAME_DEST_IMAGES.keys()):
             if not any(preferences[dest] == img["name"] for dest in img["purpose_specific_data"].dest):
                 continue
+        for dest in img["purpose_specific_data"].dest:
+            # If dest exists, delete it first
+            p = pathlib.Path(git_root) / dest
+            if not p.exists():
+                continue
+            if os.path.isdir(p):
+                shutil.rmtree(p)
+            elif os.path.isfile(p):
+                os.remove(p)
         extract_artifact(img, "\t")
     print("Finished extracting artifacts.")
