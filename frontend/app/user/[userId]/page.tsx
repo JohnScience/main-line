@@ -1,15 +1,19 @@
 "use server";
 
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import Image from "next/image";
 
 import { jwtDecode } from "jwt-decode";
 
-import { JwtClaims, UserId } from "api-client/build/gen_shared_types";
+import { getSupportedImgFormats } from "api-client";
+import { JwtClaims, LikelyResponse, UserId } from "api-client/build/gen_shared_types";
 
 import Footer from "@/app/_components/Footer";
 import TopNavBar from "@/app/_components/TopNavBar";
 import { Cookies } from "@/app/_util/cookies";
+import { toast } from "sonner";
+import { UserAvatar } from "./UserAvatar";
 
 type UserPageProps = {
     params: Promise<{
@@ -37,6 +41,18 @@ export default async function UserPage({ params }: UserPageProps) {
     }
     const loggedIn = !!accessToken;
 
+    const supportedImgFormatsResp: LikelyResponse<string> = await getSupportedImgFormats({});
+
+    let supportedImgFormats: string | null = null;
+
+    switch (supportedImgFormatsResp.kind) {
+        case "Success":
+            supportedImgFormats = supportedImgFormatsResp.value;
+            break;
+        case "InternalServerError":
+            redirect("/500");
+    }
+
     let userInfo: UserInfo | null = {
         // avatarUrl: `/api/users/${viewedUserId}/avatar`, // Example avatar URL
         username: `HardcodedName`,
@@ -51,14 +67,9 @@ export default async function UserPage({ params }: UserPageProps) {
             <main className="p-10 w-full">
                 { /* User Profile Information */}
                 <div className="min-h-[300px] w-full bg-blue-100 rounded-lg grid grid-cols-[275px_auto] items-center">
-                    <Image
-                        // src={`/api/users/${viewedUserId}/avatar`}
-                        src={userInfo?.avatarUrl || "/account.svg"}
-                        alt="User Avatar"
-                        width={150}
-                        height={150}
-                        className="rounded-full w-full h-full object-cover"
-                    />
+                    <div className="p-2">
+                        <UserAvatar avatarUrl={userInfo?.avatarUrl || null} supportedImgFormats={supportedImgFormats} />
+                    </div>
                     {/* Textual Information */}
                     <div className="h-full p-6">
                         <h2 className="text-2xl font-bold text-gray-800 mb-4">{`${userInfo?.id == viewingUserId ? "Your" : `${userInfo?.username}'s`} Profile`}</h2>

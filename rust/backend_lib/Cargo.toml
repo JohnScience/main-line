@@ -19,4 +19,7 @@ tracing.workspace = true
 utoipa.workspace = true
 utoipauto.workspace = true
 utoipa-swagger-ui.workspace = true
+browser_supported_img_format = { path = "../browser_supported_img_format" }
+mnln_core_items = { path = "../mnln_core_items" }
+mnln_env = { path = "../mnln_env" }
 shared_items_lib = { path = "../shared_items_lib" }

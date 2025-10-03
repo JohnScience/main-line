@@ -1,0 +1,7 @@
+[package]
+name = "mnln_core_items"
+version = "0.1.0"
+edition = "2024"
+description = "Core types without external dependencies that are used across multiple crates in the workspace"
+
+[dependencies]

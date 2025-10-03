@@ -1,4 +1,6 @@
 import {
+    GetSupportedImgFormatsErrors,
+    GetSupportedImgFormatsResponses,
     PostLoginErrors,
     PostLoginResponses,
     PostRegisterErrors, PostRegisterResponses,
@@ -9,8 +11,9 @@ import {
     postRegister as postRegisterInner,
     postSalt as postSaltInner,
     postLogin as postLoginInner,
+    getSupportedImgFormats as getSupportedImgFormatsInner,
 } from "./gen-client/sdk.gen";
-import { PostLoginResponse, PostRegisterResponse, PostSaltResponse } from "./gen_shared_types";
+import { LikelyResponse, PostLoginResponse, PostRegisterResponse, PostSaltResponse } from "./gen_shared_types";
 
 export * as "gen_shared_types" from "./gen_shared_types";
 
@@ -21,7 +24,7 @@ export function createClient(config: Config = {}): ReturnType<typeof createClien
     return createClientInner(config);
 }
 
-export async function postRegister(options: Parameters<typeof postRegisterInner>[0]): Promise<PostRegisterResponse> {
+export async function postRegister(options: NonNullable<Parameters<typeof postRegisterInner>[0]>): Promise<PostRegisterResponse> {
     if (!options.client) {
         options.client = createClient();
     }
@@ -34,7 +37,7 @@ export async function postRegister(options: Parameters<typeof postRegisterInner>
     }
 }
 
-export async function postSalt(options: Parameters<typeof postSaltInner>[0]): Promise<PostSaltResponse> {
+export async function postSalt(options: NonNullable<Parameters<typeof postSaltInner>[0]>): Promise<PostSaltResponse> {
     if (!options.client) {
         options.client = createClient();
     }
@@ -50,7 +53,7 @@ export async function postSalt(options: Parameters<typeof postSaltInner>[0]): Pr
     };
 }
 
-export async function postLogin(options: Parameters<typeof postLoginInner>[0]): Promise<PostLoginResponse> {
+export async function postLogin(options: NonNullable<Parameters<typeof postLoginInner>[0]>): Promise<PostLoginResponse> {
     if (!options.client) {
         options.client = createClient();
     }
@@ -62,6 +65,23 @@ export async function postLogin(options: Parameters<typeof postLoginInner>[0]): 
             return { "kind": "Success", "jwt": loginResponseSuccess.jwt };
         }
         case 401: return { "kind": "InvalidCredentials" };
+        case 500: return { "kind": "InternalServerError" };
+    }
+}
+
+export async function getSupportedImgFormats(
+    options: NonNullable<Parameters<typeof getSupportedImgFormatsInner>[0]>
+): Promise<LikelyResponse<string>> {
+    if (!options.client) {
+        options.client = createClient();
+    }
+    const result = await getSupportedImgFormatsInner(options);
+    const statusCode = result.response.status as keyof GetSupportedImgFormatsResponses | keyof GetSupportedImgFormatsErrors;
+    switch (statusCode) {
+        case 200: {
+            const responseSuccess: GetSupportedImgFormatsResponses[200] = result.data!;
+            return { "kind": "Success", "value": responseSuccess };
+        }
         case 500: return { "kind": "InternalServerError" };
     }
 }

@@ -1,0 +1,9 @@
+[package]
+name = "mnln_env"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow.workspace = true
+dotenv.workspace = true
+git_repo_root = { path = "../git_repo_root" }

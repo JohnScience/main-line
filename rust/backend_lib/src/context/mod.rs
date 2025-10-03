@@ -1,6 +1,4 @@
-pub(crate) mod env;
-
-use env::Env;
+use mnln_env::Env;
 
 use crate::db::Db;
 

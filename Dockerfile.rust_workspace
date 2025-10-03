@@ -4,24 +4,49 @@ FROM lukemathwalker/cargo-chef:latest-rust-1 AS chef
 WORKDIR /main-line
 
 FROM chef AS planner
-# We create a dummy main.rs file because cargo-chef internally runs `cargo metadata` which
-# requires a src/main.rs file to exist.
-RUN mkdir -p ./rust/shared_items_lib/src
-RUN mkdir -p ./rust/export_shared_types/src
+# We create a dummy lib.rs and main.rs files because cargo-chef internally runs `cargo metadata` which
+# requires them to exist.
+
+# Create directories to hold dummy files
 RUN mkdir -p ./rust/backend/src
 RUN mkdir -p ./rust/backend_lib/src
+RUN mkdir -p ./rust/browser_supported_img_format/src
+RUN mkdir -p ./rust/export_shared_types/src
+RUN mkdir -p ./rust/git_repo_root/src
+RUN mkdir -p ./rust/mnln_core_items/src
+RUN mkdir -p ./rust/mnln_env/src
+RUN mkdir -p ./rust/mnln_time/src
+RUN mkdir -p ./rust/object_storage/src
 RUN mkdir -p ./rust/openapi_spec/src
-RUN touch ./rust/shared_items_lib/src/lib.rs
-RUN touch ./rust/export_shared_types/src/main.rs
+RUN mkdir -p ./rust/shared_items_lib/src
+
+# Create dummy lib.rs and main.rs files
 RUN touch ./rust/backend/src/main.rs
 RUN touch ./rust/backend_lib/src/lib.rs
+RUN touch ./rust/browser_supported_img_format/src/lib.rs
+RUN touch ./rust/export_shared_types/src/main.rs
+RUN touch ./rust/git_repo_root/src/lib.rs
+RUN touch ./rust/mnln_core_items/src/lib.rs
+RUN touch ./rust/mnln_env/src/lib.rs
+RUN touch ./rust/mnln_time/src/lib.rs
+RUN touch ./rust/object_storage/src/lib.rs
 RUN touch ./rust/openapi_spec/src/main.rs
+RUN touch ./rust/shared_items_lib/src/lib.rs
+
+# Copy only the Cargo.toml files - this allows us to cache dependencies
 COPY ./rust/Cargo.toml ./rust/Cargo.toml
-COPY ./rust/shared_items_lib/Cargo.toml ./rust/shared_items_lib/Cargo.toml
-COPY ./rust/export_shared_types/Cargo.toml ./rust/export_shared_types/Cargo.toml
 COPY ./rust/backend/Cargo.toml ./rust/backend/Cargo.toml
 COPY ./rust/backend_lib/Cargo.toml ./rust/backend_lib/Cargo.toml
+COPY ./rust/browser_supported_img_format/Cargo.toml ./rust/browser_supported_img_format/Cargo.toml
+COPY ./rust/export_shared_types/Cargo.toml ./rust/export_shared_types/Cargo.toml
+COPY ./rust/git_repo_root/Cargo.toml ./rust/git_repo_root/Cargo.toml
+COPY ./rust/mnln_core_items/Cargo.toml ./rust/mnln_core_items/Cargo.toml
+COPY ./rust/mnln_env/Cargo.toml ./rust/mnln_env/Cargo.toml
+COPY ./rust/mnln_time/Cargo.toml ./rust/mnln_time/Cargo.toml
+COPY ./rust/object_storage/Cargo.toml ./rust/object_storage/Cargo.toml
 COPY ./rust/openapi_spec/Cargo.toml ./rust/openapi_spec/Cargo.toml
+COPY ./rust/shared_items_lib/Cargo.toml ./rust/shared_items_lib/Cargo.toml
+
 WORKDIR /main-line/rust
 RUN cargo chef prepare --recipe-path recipe.json
 
@@ -34,16 +59,28 @@ RUN cargo chef cook --release --recipe-path recipe.json
 WORKDIR /main-line
 COPY ./rust/.cargo/ ./rust/.cargo/
 COPY ./rust/Cargo.toml ./rust/Cargo.toml
-COPY ./rust/shared_items_lib/src/ ./rust/shared_items_lib/src/
-COPY ./rust/shared_items_lib/Cargo.toml ./rust/shared_items_lib/Cargo.toml
-COPY ./rust/export_shared_types/src/ ./rust/export_shared_types/src/
-COPY ./rust/export_shared_types/Cargo.toml ./rust/export_shared_types/Cargo.toml
 COPY ./rust/backend/src/ ./rust/backend/src/
 COPY ./rust/backend/Cargo.toml ./rust/backend/Cargo.toml
 COPY ./rust/backend_lib/src/ ./rust/backend_lib/src/
 COPY ./rust/backend_lib/Cargo.toml ./rust/backend_lib/Cargo.toml
+COPY ./rust/browser_supported_img_format/src/ ./rust/browser_supported_img_format/src/
+COPY ./rust/browser_supported_img_format/Cargo.toml ./rust/browser_supported_img_format/Cargo.toml
+COPY ./rust/export_shared_types/src/ ./rust/export_shared_types/src/
+COPY ./rust/export_shared_types/Cargo.toml ./rust/export_shared_types/Cargo.toml
+COPY ./rust/git_repo_root/src/ ./rust/git_repo_root/src/
+COPY ./rust/git_repo_root/Cargo.toml ./rust/git_repo_root/Cargo.toml
+COPY ./rust/mnln_core_items/src/ ./rust/mnln_core_items/src/
+COPY ./rust/mnln_core_items/Cargo.toml ./rust/mnln_core_items/Cargo.toml
+COPY ./rust/mnln_env/src/ ./rust/mnln_env/src/
+COPY ./rust/mnln_env/Cargo.toml ./rust/mnln_env/Cargo.toml
+COPY ./rust/mnln_time/src/ ./rust/mnln_time/src/
+COPY ./rust/mnln_time/Cargo.toml ./rust/mnln_time/Cargo.toml
+COPY ./rust/object_storage/src/ ./rust/object_storage/src/
+COPY ./rust/object_storage/Cargo.toml ./rust/object_storage/Cargo.toml
 COPY ./rust/openapi_spec/src/ ./rust/openapi_spec/src/
 COPY ./rust/openapi_spec/Cargo.toml ./rust/openapi_spec/Cargo.toml
+COPY ./rust/shared_items_lib/src/ ./rust/shared_items_lib/src/
+COPY ./rust/shared_items_lib/Cargo.toml ./rust/shared_items_lib/Cargo.toml
 COPY ./migrations/ ./migrations/
 
 FROM builder AS rust-workspace

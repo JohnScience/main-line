@@ -1,10 +1,8 @@
 [package]
-name = "shared_items_lib"
+name = "mnln_time"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-serde.workspace = true
-specta.workspace = true
-utoipa.workspace = true
+chrono.workspace = true
 mnln_core_items = { path = "../mnln_core_items" }

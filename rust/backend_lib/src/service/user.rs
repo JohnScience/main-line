@@ -81,6 +81,7 @@ pub(crate) async fn login(ctx: &Context, request: LoginRequest) -> PostLoginResp
             db::user::check_credentials::Output::Valid { user_id, role } => (user_id, role),
         };
 
+    let user_id: mnln_core_items::id::UserId = user_id.into();
     let user_id: UserId = user_id.into();
     let role: Role = role.into();
 

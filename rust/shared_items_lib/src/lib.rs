@@ -8,7 +8,20 @@ pub struct JwtString(pub String);
 /// A UNIX timestamp in milliseconds (UTC).
 #[derive(specta::Type, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
+#[repr(transparent)]
 pub struct Timestamp(pub u64);
+
+impl From<mnln_core_items::Timestamp> for Timestamp {
+    fn from(value: mnln_core_items::Timestamp) -> Self {
+        Timestamp(value.0)
+    }
+}
+
+impl From<Timestamp> for mnln_core_items::Timestamp {
+    fn from(value: Timestamp) -> Self {
+        mnln_core_items::Timestamp(value.0)
+    }
+}
 
 #[derive(specta::Type, serde::Serialize, serde::Deserialize)]
 pub struct JwtClaims {

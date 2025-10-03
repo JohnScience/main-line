@@ -43,3 +43,15 @@ pub enum PostSaltResponse {
     /// Internal server error
     InternalServerError,
 }
+
+#[derive(specta::Type)]
+pub struct LikelySuccess<T> {
+    pub value: T,
+}
+
+#[derive(specta::Type)]
+#[serde(tag = "kind")]
+pub enum LikelyResponse<T> {
+    Success(LikelySuccess<T>),
+    InternalServerError,
+}
