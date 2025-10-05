@@ -1,5 +1,8 @@
+use std::sync::Arc;
+
 use axum::response::IntoResponse as _;
 
+use axum::Extension;
 use axum::{
     Router,
     extract::{Json, State},
@@ -14,8 +17,8 @@ use shared_items_lib::service_responses::{
 };
 
 use crate::context::Context;
-use crate::service;
-use crate::service::user::{RegisterRequest, SaltRequest};
+use crate::service::user::{RegisterRequest, SaltRequest, UploadUserAvatarRequest};
+use crate::service::{self, ServiceError};
 
 #[utoipa::path(
     post,
@@ -30,7 +33,7 @@ use crate::service::user::{RegisterRequest, SaltRequest};
 )]
 #[axum::debug_handler]
 async fn post_register(
-    State(ctx): State<Context>,
+    State(ctx): State<Arc<Context>>,
     Json(request): Json<RegisterRequest>,
 ) -> Response {
     match service::user::register(&ctx, request).await {
@@ -54,7 +57,7 @@ async fn post_register(
     request_body = service::user::LoginRequest,
 )]
 async fn post_login(
-    State(ctx): State<Context>,
+    State(ctx): State<Arc<Context>>,
     Json(request): Json<service::user::LoginRequest>,
 ) -> Response {
     match service::user::login(&ctx, request).await {
@@ -76,7 +79,7 @@ async fn post_login(
     request_body = SaltRequest,
 )]
 async fn post_salt(
-    State(ctx): State<Context>,
+    State(ctx): State<Arc<Context>>,
     Json(request): Json<service::user::SaltRequest>,
 ) -> Response {
     match service::user::salt(&ctx, request).await {
@@ -86,15 +89,58 @@ async fn post_salt(
     }
 }
 
-fn user_routes() -> Router<Context> {
+#[utoipa::path(
+    post,
+    path = "/api/user/upload-avatar",
+    tag = "user",
+    responses(
+        (status = 200, description = "Avatar uploaded successfully", body = ()),
+        (status = 401, description = "Missing or invalid JWT", body = String),
+        (status = 500, description = "Internal server error", body = ()),
+    ),
+    request_body(content_type = "multipart/form-data", content = UploadUserAvatarRequest),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+async fn post_upload_user_avatar(
+    State(ctx): State<Arc<Context>>,
+    Extension(claims): Extension<Option<shared_items_lib::JwtClaims>>,
+    multipart: axum::extract::Multipart,
+) -> Response {
+    let Some(claims) = claims else {
+        return (StatusCode::UNAUTHORIZED, "Missing or invalid JWT").into_response();
+    };
+    match service::user::upload_user_avatar(&ctx, claims, multipart).await {
+        Ok(()) => StatusCode::OK.into_response(),
+        Err(ServiceError::UserExposedError {
+            status_code,
+            detail,
+        }) => (status_code, detail).into_response(),
+        Err(ServiceError::UserOpaqueError { anyhow_err }) => {
+            tracing::error!("Internal server error: {anyhow_err}");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+fn user_routes(ctx: Arc<Context>) -> Router<Arc<Context>> {
     Router::new()
         .route("/register", post(post_register))
         .route("/login", post(post_login))
         .route("/salt", post(post_salt))
+        .route(
+            "/upload-avatar",
+            post(post_upload_user_avatar).layer(axum::middleware::from_fn_with_state(
+                ctx,
+                crate::middleware::add_jwt_claims_extension,
+            )),
+        )
 }
 
 pub(in crate::requests::api) fn add_nested_routes(
-    router: axum::Router<Context>,
-) -> axum::Router<Context> {
-    router.nest("/user", user_routes())
+    router: axum::Router<Arc<Context>>,
+    ctx: Arc<Context>,
+) -> axum::Router<Arc<Context>> {
+    router.nest("/user", user_routes(ctx))
 }

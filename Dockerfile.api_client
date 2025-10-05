@@ -35,13 +35,18 @@ RUN bun run index.js -i openapi_spec.json -o ./dest/api_client
 
 FROM main-line-rust_workspace AS rust_workspace
 WORKDIR /main-line/rust
-RUN cargo run -p export_shared_types -- ../gen_shared_types.ts
+RUN cargo build --release --target x86_64-unknown-linux-musl --package export_shared_types
+
+FROM alpine AS export-shared-types-runtime
+WORKDIR /main-line
+COPY --from=rust_workspace /main-line/rust/target/x86_64-unknown-linux-musl/release/export_shared_types /usr/local/bin
+RUN /usr/local/bin/export_shared_types /main-line/gen_shared_types.ts
 
 FROM base AS api-client-build
 ARG COMPILED=true
 WORKDIR /usr/src/api_client
 COPY --from=gen-api-client-build /usr/src/app/dest/api_client .
-COPY --from=rust_workspace /main-line/gen_shared_types.ts /usr/src/api_client/src/gen_shared_types.ts
+COPY --from=export-shared-types-runtime /main-line/gen_shared_types.ts /usr/src/api_client/src/gen_shared_types.ts
 RUN if [ "$COMPILED" = "true" ]; then bun run build; fi
 
 FROM scratch AS api_client

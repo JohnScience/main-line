@@ -65,7 +65,7 @@ pub async fn save_avatar<B, E>(
     avatar_format: BrowserSupportedImgFormat,
 ) -> anyhow::Result<()>
 where
-    B: Stream<Item = Result<bytes::Bytes, E>> + Send + Unpin + 'static,
+    B: Stream<Item = Result<bytes::Bytes, E>> + Send + Unpin,
     E: Into<std::io::Error>,
 {
     let bucket = avatar_bucket(env).await?;

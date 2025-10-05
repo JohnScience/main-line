@@ -1,4 +1,6 @@
-#[derive(specta::Type, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+#[derive(
+    specta::Type, serde::Serialize, serde::Deserialize, utoipa::ToSchema, Clone, Copy, Debug,
+)]
 #[serde(transparent)]
 pub struct UserId(pub i32);
 

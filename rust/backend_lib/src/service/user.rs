@@ -1,3 +1,10 @@
+use crate::service::MapErrorToUserExposed as _;
+use crate::service::MapErrorToUserOpaque as _;
+use crate::service::ServiceResult;
+
+use axum::http::StatusCode;
+
+use browser_supported_img_format::BrowserSupportedImgFormat;
 use shared_items_lib::JwtClaims;
 use shared_items_lib::JwtString;
 use shared_items_lib::Role;
@@ -10,6 +17,7 @@ use shared_items_lib::service_responses::PostSaltResponseSuccess;
 
 use crate::Context;
 use crate::db;
+use crate::service::ServiceError;
 use crate::util;
 
 #[derive(serde::Deserialize, utoipa::ToSchema)]
@@ -165,4 +173,77 @@ pub(crate) async fn salt(ctx: &Context, request: SaltRequest) -> PostSaltRespons
     );
 
     PostSaltResponse::Success(PostSaltResponseSuccess { salt })
+}
+
+// We don't decode in anywhere because we work on streams
+// as opposed to Vec<u8>
+#[allow(unused)]
+#[derive(utoipa::ToSchema)]
+pub struct UploadUserAvatarRequest {
+    pub avatar: Vec<u8>,
+}
+
+pub(crate) async fn upload_user_avatar(
+    ctx: &Context,
+    claims: JwtClaims,
+    mut multipart: axum::extract::Multipart,
+) -> ServiceResult<()> {
+    use futures_util::stream::TryStreamExt as _;
+
+    let Some(field) = multipart.next_field().await.map_error_to_user_opaque()? else {
+        return Err(ServiceError::UserExposedError {
+            status_code: StatusCode::BAD_REQUEST,
+            detail: "Missing form field".to_string(),
+        });
+    };
+
+    let field_name: Option<&str> = field.name();
+    let Some(field_name) = field_name else {
+        return Err(ServiceError::UserExposedError {
+            status_code: StatusCode::BAD_REQUEST,
+            detail: "Missing field name".to_string(),
+        });
+    };
+    if field_name != "avatar" {
+        return Err(ServiceError::UserExposedError {
+            status_code: StatusCode::BAD_REQUEST,
+            detail: "Unexpected field name".to_string(),
+        });
+    };
+
+    let file_name: Option<&str> = field.file_name();
+    let Some(file_name) = file_name else {
+        return Err(ServiceError::UserExposedError {
+            status_code: StatusCode::BAD_REQUEST,
+            detail: "Missing file name".to_string(),
+        });
+    };
+
+    let Some(file_format) = BrowserSupportedImgFormat::infer(file_name) else {
+        return Err(ServiceError::UserExposedError {
+            status_code: StatusCode::BAD_REQUEST,
+            detail: "Unsupported image format".to_string(),
+        });
+    };
+
+    let stream = field.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e));
+
+    let user_id: mnln_core_items::id::UserId = claims.sub.into();
+
+    object_storage::save_avatar(&ctx.env, user_id, stream, file_format)
+        .await
+        .map_error_to_user_exposed(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to save avatar".to_string(),
+        )?;
+
+    let none_field = multipart.next_field().await.map_error_to_user_opaque()?;
+    if none_field.is_some() {
+        return Err(ServiceError::UserExposedError {
+            status_code: StatusCode::BAD_REQUEST,
+            detail: "Unexpected extra form field".to_string(),
+        });
+    }
+
+    Ok(())
 }

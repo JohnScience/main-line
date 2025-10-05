@@ -26,3 +26,11 @@ pub(crate) fn sign_jwt(claims: &JwtClaims, ctx: &Context) -> anyhow::Result<JwtS
     let token_str = claims.sign_with_key(&key)?;
     Ok(JwtString(token_str))
 }
+
+pub(crate) fn verify_jwt(token: &str, ctx: &Context) -> anyhow::Result<JwtClaims> {
+    use jwt::VerifyWithKey as _;
+
+    let key: Hmac<Sha256> = Hmac::new_from_slice(ctx.env.jwt_signing_key.as_bytes())?;
+    let claims: JwtClaims = token.verify_with_key(&key)?;
+    Ok(claims)
+}

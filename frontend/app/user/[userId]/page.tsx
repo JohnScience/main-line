@@ -2,7 +2,6 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import Image from "next/image";
 
 import { jwtDecode } from "jwt-decode";
 
@@ -12,7 +11,6 @@ import { JwtClaims, LikelyResponse, UserId } from "api-client/build/gen_shared_t
 import Footer from "@/app/_components/Footer";
 import TopNavBar from "@/app/_components/TopNavBar";
 import { Cookies } from "@/app/_util/cookies";
-import { toast } from "sonner";
 import { UserAvatar } from "./UserAvatar";
 
 type UserPageProps = {

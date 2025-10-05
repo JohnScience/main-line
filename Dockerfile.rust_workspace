@@ -1,6 +1,7 @@
 # Based on https://github.com/LukeMathWalker/cargo-chef
 
-FROM lukemathwalker/cargo-chef:latest-rust-1 AS chef
+FROM clux/muslrust:stable AS chef
+RUN cargo install cargo-chef
 WORKDIR /main-line
 
 FROM chef AS planner
@@ -54,7 +55,7 @@ FROM chef AS builder
 WORKDIR /main-line/rust
 COPY --from=planner /main-line/rust/recipe.json ./recipe.json
 # Build dependencies - this is the caching Docker layer!
-RUN cargo chef cook --release --recipe-path recipe.json
+RUN cargo chef cook --release --target x86_64-unknown-linux-musl --recipe-path recipe.json
 # Build application
 WORKDIR /main-line
 COPY ./rust/.cargo/ ./rust/.cargo/

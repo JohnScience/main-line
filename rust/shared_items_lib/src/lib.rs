@@ -6,7 +6,7 @@ pub mod service_responses;
 pub struct JwtString(pub String);
 
 /// A UNIX timestamp in milliseconds (UTC).
-#[derive(specta::Type, serde::Serialize, serde::Deserialize)]
+#[derive(specta::Type, serde::Serialize, serde::Deserialize, Clone, Copy, Debug)]
 #[serde(transparent)]
 #[repr(transparent)]
 pub struct Timestamp(pub u64);
@@ -23,7 +23,7 @@ impl From<Timestamp> for mnln_core_items::Timestamp {
     }
 }
 
-#[derive(specta::Type, serde::Serialize, serde::Deserialize)]
+#[derive(specta::Type, serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct JwtClaims {
     /// Subject of the JWT (the user)
     pub sub: id::UserId,
@@ -35,7 +35,7 @@ pub struct JwtClaims {
     pub role: Role,
 }
 
-#[derive(specta::Type, serde::Serialize, serde::Deserialize)]
+#[derive(specta::Type, serde::Serialize, serde::Deserialize, Clone, Copy, Debug)]
 pub enum Role {
     Admin,
     User,

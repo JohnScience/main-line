@@ -3,8 +3,10 @@
 import Image from "next/image";
 import { toast } from "sonner";
 
-function uploadAvatarToServer(filename: string, fileData: ArrayBuffer) {
-    console.log(`Uploading avatar image ${filename} to server...`);
+function uploadAvatarToServer(file: File) {
+    let formData = new FormData();
+    formData.append("avatar", file);
+    console.log(`Uploading ${file.size} bytes avatar image ${file.name} to server...`);
 }
 
 function makeAvatarImgReader(
@@ -20,7 +22,7 @@ function makeAvatarImgReader(
     };
     reader.onload = () => {
         const contents = reader.result as ArrayBuffer;
-        uploadAvatarToServer(file.name, contents);
+        uploadAvatarToServer(file);
     };
 
     reader.onerror = () => {

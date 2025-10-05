@@ -2,14 +2,18 @@ FROM main-line-backend_lib AS backend-lib
 
 WORKDIR /main-line/rust
 
-RUN cargo build --release --package openapi_spec
+RUN cargo run --package openapi_spec -- > /main-line/rust/openapi_spec/openapi_spec.json
 
+# # This does not seem to work on Alpine.
+# FROM alpine AS runtime
 
-FROM debian:bookworm-slim AS runtime
+# COPY --from=backend-lib /main-line/rust/target/x86_64-unknown-linux-musl/release/openapi_spec /usr/local/bin
+# RUN /usr/local/bin/openapi_spec > /usr/local/bin/openapi_spec.json
 
-COPY --from=backend-lib /main-line/rust/target/release/openapi_spec /usr/local/bin
-RUN /usr/local/bin/openapi_spec > /usr/local/bin/openapi_spec.json
+# FROM scratch AS openapi_spec
+# WORKDIR /openapi_spec
+# COPY --from=runtime /usr/local/bin/openapi_spec.json /openapi_spec/openapi_spec.json
 
 FROM scratch AS openapi_spec
 WORKDIR /openapi_spec
-COPY --from=runtime /usr/local/bin/openapi_spec.json /openapi_spec/openapi_spec.json
+COPY --from=backend-lib /main-line/rust/openapi_spec/openapi_spec.json /openapi_spec/openapi_spec.json

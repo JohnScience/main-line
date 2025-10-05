@@ -11,6 +11,7 @@ async fn main() -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
 
     let ctx = Context::new().await?;
+    let ctx = std::sync::Arc::new(ctx);
 
     let app = make_router(ctx)?;
 

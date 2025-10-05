@@ -5,11 +5,11 @@ FROM main-line-backend_lib AS backend-lib
 
 WORKDIR /main-line/rust
 
-RUN cargo build --release --package backend
+RUN cargo build --release --target x86_64-unknown-linux-musl --package backend
 
 # We do not need the Rust toolchain to run the binary!
-FROM debian:bookworm-slim AS runtime
+FROM alpine AS runtime
 
-COPY --from=backend-lib /main-line/rust/target/release/backend /usr/local/bin
+COPY --from=backend-lib /main-line/rust/target/x86_64-unknown-linux-musl/release/backend /usr/local/bin
 EXPOSE 3000
 ENTRYPOINT ["/usr/local/bin/backend"]

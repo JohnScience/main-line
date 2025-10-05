@@ -17,9 +17,14 @@ resolver = "3"
 [workspace.dependencies]
 anyhow = "1.0.100"
 argon2 = "0.5.3"
-aws-creds = "0.39.0"
+aws-creds = { version = "0.39.0", features = [
+    "http-credentials",
+    "attohttpc",
+    "rustls-tls",
+], default-features = false }
 aws-region = "0.28.0"
 axum = { version = "0.8.6", features = ["macros"] }
+axum_typed_multipart = "0.16.4"
 bytes = "1.10.1"
 chrono = { version = "0.4.42", features = [
     "clock",
@@ -28,10 +33,15 @@ chrono = { version = "0.4.42", features = [
 derive_more = { version = "2.0.1", features = ["display"] }
 dotenv = "0.15.0"
 futures-core = "0.3.31"
+futures-util = "0.3.31"
 hmac = "0.12.1"
 jwt = "0.16.0"
 # S3 is used as a protocol, so we are still cloud provider agnostic
-rust-s3 = "0.37.0"
+rust-s3 = { version = "0.37.0", features = [
+    "fail-on-err",
+    "tags",
+    "tokio-rustls-tls",
+], default-features = false }
 serde = { version = "1.0.228", features = ["derive"] }
 sha2 = "0.10.9"
 specta = { version = "1.0.5", features = ["typescript", "export"] }

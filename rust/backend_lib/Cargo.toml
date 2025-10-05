@@ -7,8 +7,12 @@ edition = "2024"
 anyhow.workspace = true
 argon2.workspace = true
 axum.workspace = true
+axum_typed_multipart.workspace = true
+bytes.workspace = true
 chrono.workspace = true
 derive_more.workspace = true
+futures-core.workspace = true
+futures-util.workspace = true
 hmac.workspace = true
 jwt.workspace = true
 serde.workspace = true
@@ -22,4 +26,5 @@ utoipa-swagger-ui.workspace = true
 browser_supported_img_format = { path = "../browser_supported_img_format" }
 mnln_core_items = { path = "../mnln_core_items" }
 mnln_env = { path = "../mnln_env" }
+object_storage = { path = "../object_storage" }
 shared_items_lib = { path = "../shared_items_lib" }

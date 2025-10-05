@@ -26,6 +26,6 @@ RUN service postgresql start && \
     # Generate the sqlx data
     cargo sqlx prepare --workspace -- --all-targets
 
-RUN cargo build --release --package backend_lib
+RUN cargo build --release --target x86_64-unknown-linux-musl --package backend_lib
 
 FROM rust-workspace AS backend-lib
