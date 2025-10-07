@@ -1,9 +1,0 @@
-FROM node:24-bookworm AS base
-WORKDIR /api-client-gen
-RUN npm install -g openapi-typescript-codegen
-COPY --from=main-line-openapi_spec /openapi_spec/openapi_spec.json .
-RUN openapi --input openapi_spec.json --output ./dest --useOptions --client axios --name MainLineApiClient
-
-FROM scratch AS api_client_v2
-WORKDIR /api_client_v2
-COPY --from=base /api-client-gen/dest .
