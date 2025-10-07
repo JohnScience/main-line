@@ -1,0 +1,8 @@
+FROM openapitools/openapi-generator-cli AS base
+WORKDIR /api_client_gen
+COPY --from=main-line-openapi_spec /openapi_spec/openapi_spec.json .
+RUN openapi-generator-cli generate -i openapi_spec.json -g typescript-axios -o ./dest --additional-properties=npmName=@main-line/api_client
+
+FROM scratch AS api_client_gen
+WORKDIR /api_client
+COPY --from=base /api_client_gen/dest .
