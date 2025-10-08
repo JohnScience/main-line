@@ -31,6 +31,12 @@ Once you have the dependencies installed, follow these steps:
 python -m scripts.generate_secrets
 ```
 
+* Generate the TLS certificates using the Python script:
+
+```bash
+python -m scripts.generate_certs
+```
+
 * Build the intermediate Docker images using the Python script:
 
 ```bash

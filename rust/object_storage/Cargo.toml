@@ -9,6 +9,7 @@ aws-creds.workspace = true
 aws-region.workspace = true
 bytes.workspace = true
 futures-core.workspace = true
+futures-util.workspace = true
 rust-s3.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true

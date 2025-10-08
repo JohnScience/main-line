@@ -1,8 +1,3 @@
-x-database-env: &database-env
-  POSTGRES_USER: tester
-  POSTGRES_PASSWORD: tester
-  POSTGRES_DB: tester
-
 services:
   db:
     image: "postgres:17-alpine"
@@ -28,13 +23,14 @@ services:
       - secrets/minio_config.env
     volumes:
       - ./minio_data:/data
+      - ./certs/minio:/root/.minio/certs
     ports:
       - "9000:9000"
       - "9001:9001"
-    command: minio server /data --console-address ":9001"
+    command: minio server /data --console-address ":9001" --certs-dir /root/.minio/certs
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ["CMD", "curl", "-k", "http://localhost:9000/minio/health/ready"]
       interval: 1s
       timeout: 1s
       retries: 20
@@ -49,6 +45,7 @@ services:
       minio:
         condition: service_healthy
     environment:
+      RUST_BACKTRACE: full
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
       BASE_FRONTEND_URL: http://localhost:3001

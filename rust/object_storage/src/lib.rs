@@ -1,3 +1,6 @@
+use anyhow::Context as _;
+use futures_util::stream::StreamExt as _;
+
 use awsregion::Region;
 use futures_core::stream::Stream;
 use s3::{BucketConfiguration, bucket::Bucket};
@@ -48,6 +51,7 @@ async fn avatar_bucket(env: &Env) -> anyhow::Result<Box<Bucket>> {
         default_region(env),
         creds,
     )?
+    .set_dangereous_config(true, true)?
     .with_path_style();
     Ok(bucket)
 }
@@ -61,19 +65,30 @@ fn avatar_key(user_id: UserId, format: BrowserSupportedImgFormat) -> String {
 pub async fn save_avatar<B, E>(
     env: &Env,
     user_id: UserId,
-    avatar: B,
+    mut avatar: B,
     avatar_format: BrowserSupportedImgFormat,
 ) -> anyhow::Result<()>
 where
     B: Stream<Item = Result<bytes::Bytes, E>> + Send + Unpin,
     E: Into<std::io::Error>,
 {
-    let bucket = avatar_bucket(env).await?;
+    let bucket = avatar_bucket(env)
+        .await
+        .context("Failed to get avatar bucket")?;
     let key = avatar_key(user_id, avatar_format);
 
-    let mut reader = tokio_util::io::StreamReader::new(avatar);
+    let mut buffer = Vec::<u8>::new();
 
-    bucket.put_object_stream(&mut reader, key).await?;
+    while let Some(chunk) = avatar.next().await {
+        let chunk: Result<bytes::Bytes, std::io::Error> = chunk.map_err(|e| e.into());
+        let chunk = chunk.context("Stream error")?;
+        buffer.extend_from_slice(&chunk);
+    }
+
+    bucket
+        .put_object(key, &buffer)
+        .await
+        .context("put_object_stream failed")?;
 
     Ok(())
 }

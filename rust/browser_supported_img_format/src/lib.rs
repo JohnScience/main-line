@@ -1,3 +1,4 @@
+#[derive(Clone, Copy)]
 pub enum BrowserSupportedImgFormat {
     Bmp,
     Png,
@@ -44,5 +45,16 @@ impl BrowserSupportedImgFormat {
     /// See <https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/accept>.
     pub fn accept_str() -> &'static str {
         ".bmp,.png,.jpg,.jpeg,.gif,.webp,.svg"
+    }
+
+    pub fn content_type(&self) -> &'static str {
+        match self {
+            Self::Bmp => "image/bmp",
+            Self::Png => "image/png",
+            Self::Jpeg => "image/jpeg",
+            Self::Gif => "image/gif",
+            Self::Webp => "image/webp",
+            Self::Svg => "image/svg+xml",
+        }
     }
 }

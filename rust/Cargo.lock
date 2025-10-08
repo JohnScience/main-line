@@ -1887,6 +1887,7 @@ dependencies = [
  "browser_supported_img_format",
  "bytes",
  "futures-core",
+ "futures-util",
  "mnln_core_items",
  "mnln_env",
  "mnln_time",
