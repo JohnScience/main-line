@@ -1,7 +1,13 @@
 # Based on https://github.com/LukeMathWalker/cargo-chef
 
 FROM clux/muslrust:stable AS chef
+RUN apt-get update
+# We install PostgreSQL here because we need it to run the migrations and generate the sqlx data
+RUN apt-get install -y postgresql postgresql-contrib
+# We install cargo-chef so that we can cache our dependencies
 RUN cargo install cargo-chef
+# We install sqlx-cli so that we can run the migrations and generate the sqlx data
+RUN cargo install sqlx-cli --no-default-features --features postgres
 WORKDIR /main-line
 
 FROM chef AS planner

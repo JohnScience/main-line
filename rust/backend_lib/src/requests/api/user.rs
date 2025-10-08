@@ -95,8 +95,9 @@ async fn post_salt(
     tag = "user",
     responses(
         (status = 200, description = "Avatar uploaded successfully", body = ()),
+        (status = 400, description = "Bad request", body = String),
         (status = 401, description = "Missing or invalid JWT", body = String),
-        (status = 500, description = "Internal server error", body = ()),
+        (status = 500, description = "Internal server error", body = Option<String>),
     ),
     request_body(content_type = "multipart/form-data", content = UploadUserAvatarRequest),
     security(
@@ -109,6 +110,7 @@ async fn post_upload_user_avatar(
     multipart: axum::extract::Multipart,
 ) -> Response {
     let Some(claims) = claims else {
+        tracing::warn!("post_upload_user_avatar: Missing JWT claims");
         return (StatusCode::UNAUTHORIZED, "Missing or invalid JWT").into_response();
     };
     match service::user::upload_user_avatar(&ctx, claims, multipart).await {

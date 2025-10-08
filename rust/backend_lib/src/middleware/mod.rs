@@ -13,7 +13,12 @@ pub(crate) async fn log_request(
     req: Request,
     next: axum::middleware::Next,
 ) -> axum::response::Response {
-    info!("Received request: {} {}", req.method(), req.uri());
+    info!(
+        "Received request: {} {}.\nHeaders: {:?}",
+        req.method(),
+        req.uri(),
+        req.headers()
+    );
     next.run(req).await
 }
 

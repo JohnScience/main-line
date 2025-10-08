@@ -5,8 +5,6 @@ FROM main-line-rust_workspace AS rust-workspace
 
 WORKDIR /main-line/rust
 
-RUN apt-get update && apt-get install -y postgresql postgresql-contrib && cargo install sqlx-cli --no-default-features --features postgres
-
 ARG POSTGRES_USER=tester
 ARG POSTGRES_PASSWORD=tester
 ARG POSTGRES_DB=tester

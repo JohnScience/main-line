@@ -31,6 +31,8 @@ COPY --from=gen-api-client-prebuild /usr/src/app/package.json .
 COPY --from=gen-api-client-prebuild /usr/src/app/api-client-template/ api-client-template/
 COPY --from=main-line-openapi_spec /openapi_spec/openapi_spec.json .
 
+# Output build.log AND print to console, preserving exit code and capturing stderr
+# RUN bun run index.js -i openapi_spec.json -o ./dest/api_client 2>&1 | tee build.log
 RUN bun run index.js -i openapi_spec.json -o ./dest/api_client
 
 FROM main-line-rust_workspace AS rust_workspace
@@ -46,9 +48,11 @@ FROM base AS api-client-build
 ARG COMPILED=true
 WORKDIR /usr/src/api_client
 COPY --from=gen-api-client-build /usr/src/app/dest/api_client .
+# COPY --from=gen-api-client-build /usr/src/app/build.log .
 COPY --from=export-shared-types-runtime /main-line/gen_shared_types.ts /usr/src/api_client/src/gen_shared_types.ts
 RUN if [ "$COMPILED" = "true" ]; then bun run build; fi
 
 FROM scratch AS api_client
 WORKDIR /api_client
 COPY --from=api-client-build /usr/src/api_client .
+# COPY --from=api-client-build /usr/src/api_client/build.log .

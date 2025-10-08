@@ -9,6 +9,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "@hey-api/openapi-ts": "0.83.1"
+    "@hey-api/openapi-ts": "0.83.1",
+    "ts-morph": "27.0.0"
   }
 }

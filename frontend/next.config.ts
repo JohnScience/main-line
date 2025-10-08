@@ -28,6 +28,14 @@ const nextConfig: NextConfig = {
 
     return config;
   },
+  async rewrites() {
+    return [
+      {
+        "source": "/backend-proxy/:path*",
+        "destination": process.env.BACKEND_API_URL ? `${process.env.BACKEND_API_URL}/:path*` : "http://localhost:3000/:path*"
+      }
+    ]
+  }
 };
 
 export default nextConfig;

@@ -180,7 +180,9 @@ pub(crate) async fn salt(ctx: &Context, request: SaltRequest) -> PostSaltRespons
 #[allow(unused)]
 #[derive(utoipa::ToSchema)]
 pub struct UploadUserAvatarRequest {
-    pub avatar: Vec<u8>,
+    // https://github.com/juhaku/utoipa/issues/197
+    #[schema(value_type = String, format = Binary)]
+    pub avatar: bytes::Bytes,
 }
 
 pub(crate) async fn upload_user_avatar(
@@ -207,7 +209,7 @@ pub(crate) async fn upload_user_avatar(
     if field_name != "avatar" {
         return Err(ServiceError::UserExposedError {
             status_code: StatusCode::BAD_REQUEST,
-            detail: "Unexpected field name".to_string(),
+            detail: format!("Unexpected field name: `{field_name}`"),
         });
     };
 
@@ -222,7 +224,7 @@ pub(crate) async fn upload_user_avatar(
     let Some(file_format) = BrowserSupportedImgFormat::infer(file_name) else {
         return Err(ServiceError::UserExposedError {
             status_code: StatusCode::BAD_REQUEST,
-            detail: "Unsupported image format".to_string(),
+            detail: format!("Unsupported image format for the file: `{file_name}`"),
         });
     };
 
