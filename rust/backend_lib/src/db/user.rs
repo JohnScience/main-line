@@ -214,3 +214,22 @@ pub(crate) async fn get_password_hash(
 
     Ok(res.map(get_password_hash::PHCString))
 }
+
+pub(crate) async fn set_avatar(
+    pg_pool: &sqlx::PgPool,
+    user_id: UserId,
+    avatar_s3_key: &str,
+) -> sqlx::Result<()> {
+    sqlx::query!(
+        r#"
+        UPDATE users
+        SET avatar_s3_key = $1
+        WHERE id = $2
+        "#,
+        avatar_s3_key,
+        user_id.0,
+    )
+    .execute(pg_pool)
+    .await?;
+    Ok(())
+}

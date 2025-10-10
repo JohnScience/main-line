@@ -5,6 +5,7 @@ use crate::service::ServiceResult;
 use axum::http::StatusCode;
 
 use browser_supported_img_format::BrowserSupportedImgFormat;
+use futures_core::Stream;
 use shared_items_lib::JwtClaims;
 use shared_items_lib::JwtString;
 use shared_items_lib::Role;
@@ -185,11 +186,15 @@ pub struct UploadUserAvatarRequest {
     pub avatar: bytes::Bytes,
 }
 
-pub(crate) async fn upload_user_avatar(
-    ctx: &Context,
-    claims: JwtClaims,
-    mut multipart: axum::extract::Multipart,
-) -> ServiceResult<()> {
+async fn avatar_byte_stream_from_multipart<'m>(
+    multipart: &'m mut axum::extract::Multipart,
+) -> Result<
+    (
+        impl Stream<Item = Result<bytes::Bytes, std::io::Error>> + Send + Unpin,
+        BrowserSupportedImgFormat,
+    ),
+    ServiceError,
+> {
     use futures_util::stream::TryStreamExt as _;
 
     let Some(field) = multipart.next_field().await.map_error_to_user_opaque()? else {
@@ -230,15 +235,35 @@ pub(crate) async fn upload_user_avatar(
 
     let stream = field.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e));
 
+    Ok((stream, file_format))
+}
+
+pub(crate) async fn upload_user_avatar(
+    ctx: &Context,
+    claims: JwtClaims,
+    mut multipart: axum::extract::Multipart,
+) -> ServiceResult<()> {
     let user_id: mnln_core_items::id::UserId = claims.sub.into();
 
-    object_storage::save_avatar(&ctx.env, user_id, stream, file_format)
+    let (stream, file_format) = avatar_byte_stream_from_multipart(&mut multipart).await?;
+
+    let s3_key = object_storage::save_avatar(&ctx.env, user_id, stream, file_format)
         .await
         .map_error_to_user_exposed(
             StatusCode::INTERNAL_SERVER_ERROR,
             "Failed to save avatar".to_string(),
         )?;
 
+    let user_id: db::id::UserId = user_id.into();
+
+    db::user::set_avatar(&ctx.db, user_id, &s3_key)
+        .await
+        .map_error_to_user_exposed(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to set the uploaded avatar".to_string(),
+        )?;
+
+    // TODO: find a way to do this via a drop guard
     let none_field = multipart.next_field().await.map_error_to_user_opaque()?;
     if none_field.is_some() {
         return Err(ServiceError::UserExposedError {

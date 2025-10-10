@@ -13,6 +13,8 @@ impl Context {
         let env = Env::from_env()?;
         let db = Db::new(&env.pg).await?;
 
+        object_storage::init(&env).await?;
+
         let ctx = Self { env, db };
         Ok(ctx)
     }

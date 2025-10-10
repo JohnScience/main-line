@@ -36,12 +36,11 @@ futures-core = "0.3.31"
 futures-util = "0.3.31"
 hmac = "0.12.1"
 jwt = "0.16.0"
-# S3 is used as a protocol, so we are still cloud provider agnostic
-rust-s3 = { version = "0.37.0", features = [
+rust-s3 = { git = "https://github.com/JohnScience/rust-s3", rev = "a3cde86", features = [
     "fail-on-err",
     "tags",
     "tokio-rustls-tls",
-], default-features = false }
+], default-features = false } # S3 is used as a protocol, so we are still cloud provider agnostic
 serde = { version = "1.0.228", features = ["derive"] }
 sha2 = "0.10.9"
 specta = { version = "1.0.5", features = ["typescript", "export"] }

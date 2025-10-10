@@ -13,6 +13,7 @@ futures-util.workspace = true
 rust-s3.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
+tracing.workspace = true
 mnln_core_items = { path = "../mnln_core_items" }
 mnln_env = { path = "../mnln_env" }
 mnln_time = { path = "../mnln_time" }

@@ -1,9 +1,8 @@
 use anyhow::Context as _;
-use futures_util::stream::StreamExt as _;
 
 use awsregion::Region;
 use futures_core::stream::Stream;
-use s3::{BucketConfiguration, bucket::Bucket};
+use s3::{Bucket, CreateBucketOptions};
 
 use browser_supported_img_format::BrowserSupportedImgFormat;
 use mnln_core_items::Timestamp;
@@ -33,14 +32,22 @@ fn default_region(env: &Env) -> Region {
 pub async fn init(env: &Env) -> anyhow::Result<()> {
     let avatar_bucket = avatar_bucket(env).await?;
     if !avatar_bucket.exists().await? {
-        Bucket::create_with_path_style(
-            &env.minio.avatar_bucket,
-            default_region(env),
-            creds(env)?,
-            BucketConfiguration::default(),
-        )
-        .await?;
-    }
+        tracing::info!(
+            "Avatar bucket `{}` does not exist. Creating...",
+            &env.minio.avatar_bucket
+        );
+        let mut opts =
+            CreateBucketOptions::new(&env.minio.avatar_bucket, default_region(env), creds(env)?);
+        opts.path_style = true;
+        opts.set_dangerous_config(true, true);
+        let _create_bucket_response = Bucket::create_with_opts(opts).await?;
+        tracing::info!("Created avatar bucket: `{}`", &env.minio.avatar_bucket);
+    } else {
+        tracing::info!(
+            "Avatar bucket `{}` already exists. Skipping creation.",
+            &env.minio.avatar_bucket
+        );
+    };
     Ok(())
 }
 
@@ -65,9 +72,9 @@ fn avatar_key(user_id: UserId, format: BrowserSupportedImgFormat) -> String {
 pub async fn save_avatar<B, E>(
     env: &Env,
     user_id: UserId,
-    mut avatar: B,
+    avatar: B,
     avatar_format: BrowserSupportedImgFormat,
-) -> anyhow::Result<()>
+) -> anyhow::Result<String>
 where
     B: Stream<Item = Result<bytes::Bytes, E>> + Send + Unpin,
     E: Into<std::io::Error>,
@@ -77,20 +84,13 @@ where
         .context("Failed to get avatar bucket")?;
     let key = avatar_key(user_id, avatar_format);
 
-    let mut buffer = Vec::<u8>::new();
-
-    while let Some(chunk) = avatar.next().await {
-        let chunk: Result<bytes::Bytes, std::io::Error> = chunk.map_err(|e| e.into());
-        let chunk = chunk.context("Stream error")?;
-        buffer.extend_from_slice(&chunk);
-    }
-
+    let mut reader = tokio_util::io::StreamReader::new(avatar);
     bucket
-        .put_object(key, &buffer)
+        .put_object_stream(&mut reader, &key)
         .await
         .context("put_object_stream failed")?;
 
-    Ok(())
+    Ok(key)
 }
 
 #[cfg(test)]

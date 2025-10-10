@@ -1,4 +1,5 @@
 /// A user ID in the PostgreSQL database.
+#[derive(Clone, Copy)]
 #[repr(transparent)]
 pub struct UserId(pub i32);
 

@@ -6,7 +6,7 @@ services:
     env_file:
       - secrets/pg_config.env
     volumes:
-      - ./dbdata:/var/lib/postgresql/data
+      - ./data/pg_data:/var/lib/postgresql/data
     healthcheck:
       test:
         [
@@ -22,7 +22,7 @@ services:
     env_file:
       - secrets/minio_config.env
     volumes:
-      - ./minio_data:/data
+      - ./data/minio_data:/data
       - ./certs/minio:/root/.minio/certs
     ports:
       - "9000:9000"
@@ -70,6 +70,8 @@ services:
       - "8080:80"
     depends_on:
       - db
+    volumes:
+      - ./data/pgadmin_data:/var/lib/pgadmin
     restart: unless-stopped
 
   frontend:
