@@ -1,5 +1,6 @@
 use axum::http::StatusCode;
 
+pub(crate) mod bff;
 pub(crate) mod user;
 
 pub(crate) enum ServiceError {

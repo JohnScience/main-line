@@ -10,8 +10,6 @@ import { handleUploadAvatarToServer } from "./actions";
 function uploadAvatarToServer(file: File, uploadAvatarAction: (payload: FormData) => void) {
     let formData = new FormData();
     formData.append("avatar", file);
-    console.log(formData);
-    console.log(formData.get("avatar"));
     startTransition(() => {
         uploadAvatarAction(formData);
     });

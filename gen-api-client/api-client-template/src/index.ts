@@ -1,6 +1,8 @@
 import {
     GetSupportedImgFormatsErrors,
     GetSupportedImgFormatsResponses,
+    GetUserPageDataErrors,
+    GetUserPageDataResponses,
     PostLoginErrors,
     PostLoginResponses,
     PostRegisterErrors, PostRegisterResponses,
@@ -14,8 +16,9 @@ import {
     postLogin as postLoginInner,
     getSupportedImgFormats as getSupportedImgFormatsInner,
     postUploadUserAvatar as postUploadUserAvatarInner,
+    getUserPageData as getUserPageDataInner,
 } from "./gen-client/sdk.gen";
-import { JwtString, LikelyResponse, PostLoginResponse, PostRegisterResponse, PostSaltResponse } from "./gen_shared_types";
+import { GetUserPageDataResponse, JwtString, LikelyResponse, PostLoginResponse, PostRegisterResponse, PostSaltResponse } from "./gen_shared_types";
 
 export * as "gen_shared_types" from "./gen_shared_types";
 
@@ -104,5 +107,21 @@ export async function postUploadUserAvatar(
             const detail: PostUploadUserAvatarErrors[500] = result.error!;
             return { "kind": "InternalServerError", ...{ detail } };
         };
+    }
+}
+
+export async function getUserPageData(
+    options: HttpMethodCallOptions<typeof getUserPageDataInner>
+): Promise<GetUserPageDataResponse> {
+    modifyOptions(options);
+    const result = await getUserPageDataInner(options);
+    const statusCode = result.response.status as keyof GetUserPageDataResponses | keyof GetUserPageDataErrors;
+    switch (statusCode) {
+        case 200: {
+            const responseSuccess: GetUserPageDataResponses[200] = result.data!;
+            return { "kind": "Success", ...responseSuccess };
+        }
+        case 404: return { "kind": "NotFound" };
+        case 500: return { "kind": "InternalServerError" };
     }
 }

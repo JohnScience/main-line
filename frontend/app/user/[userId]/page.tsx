@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 
 import { jwtDecode } from "jwt-decode";
 
-import { getSupportedImgFormats } from "api-client";
+import { getSupportedImgFormats, getUserPageData } from "api-client";
 import { JwtClaims, LikelyResponse, UserId } from "api-client/build/gen_shared_types";
 
 import Footer from "@/app/_components/Footer";
@@ -18,15 +18,6 @@ type UserPageProps = {
         userId: string;
     }>
 };
-
-interface UserInfo {
-    avatarUrl?: string;
-    username: string;
-    id: UserId;
-    email?: string;
-    chessDotComProfile?: string;
-    lichessDotOrgProfile?: string;
-}
 
 export default async function UserPage({ params }: UserPageProps) {
     const { userId: viewedUserId } = await params;
@@ -51,10 +42,18 @@ export default async function UserPage({ params }: UserPageProps) {
             redirect("/500");
     }
 
-    let userInfo: UserInfo | null = {
-        // avatarUrl: `/api/users/${viewedUserId}/avatar`, // Example avatar URL
-        username: `HardcodedName`,
-        id: parseInt(viewedUserId)
+    let userPageData = await getUserPageData({
+        path: { user_id: parseInt(viewedUserId) }
+    });
+
+    switch (userPageData.kind) {
+        case "NotFound":
+            console.warn(`Couldn't find the user with id ${parseInt(viewedUserId)}}`);
+            redirect("/404");
+        case "InternalServerError":
+            redirect("/500");
+        case "Success":
+            break;
     };
 
     return (
@@ -66,31 +65,31 @@ export default async function UserPage({ params }: UserPageProps) {
                 { /* User Profile Information */}
                 <div className="min-h-[300px] w-full bg-blue-100 rounded-lg grid grid-cols-[275px_auto] items-center">
                     <div className="p-2">
-                        <UserAvatar avatarUrl={userInfo?.avatarUrl || null} supportedImgFormats={supportedImgFormats} />
+                        <UserAvatar avatarUrl={userPageData?.avatar_url || null} supportedImgFormats={supportedImgFormats} />
                     </div>
                     {/* Textual Information */}
                     <div className="h-full p-6">
-                        <h2 className="text-2xl font-bold text-gray-800 mb-4">{`${userInfo?.id == viewingUserId ? "Your" : `${userInfo?.username}'s`} Profile`}</h2>
+                        <h2 className="text-2xl font-bold text-gray-800 mb-4">{`${parseInt(viewedUserId) == viewingUserId ? "Your" : `${userPageData?.username}'s`} Profile`}</h2>
                         <div className="space-y-3">
                             <div>
                                 <span className="font-semibold text-gray-600">Username:</span>
-                                <span className="ml-2 text-gray-800">{userInfo?.username}</span>
+                                <span className="ml-2 text-gray-800">{userPageData?.username}</span>
                             </div>
                             <div>
                                 <span className="font-semibold text-gray-600">ID:</span>
-                                <span className="ml-2 text-gray-800">{userInfo?.id}</span>
+                                <span className="ml-2 text-gray-800">{viewedUserId}</span>
                             </div>
                             <div>
                                 <span className="font-semibold text-gray-600">Email:</span>
-                                <span className="ml-2 text-gray-800">{userInfo?.email || "No email provided"}</span>
+                                <span className="ml-2 text-gray-800">{userPageData?.email || "No email provided"}</span>
                             </div>
                             <div>
                                 <span className="font-semibold text-gray-600">Chess.com Profile:</span>
-                                <span className="ml-2 text-gray-800">{userInfo?.chessDotComProfile || "No profile linked"}</span>
+                                <span className="ml-2 text-gray-800">{userPageData?.chess_dot_com_profile || "No profile linked"}</span>
                             </div>
                             <div>
                                 <span className="font-semibold text-gray-600">Lichess.org Profile:</span>
-                                <span className="ml-2 text-gray-800">{userInfo?.lichessDotOrgProfile || "No profile linked"}</span>
+                                <span className="ml-2 text-gray-800">{userPageData?.lichess_profile || "No profile linked"}</span>
                             </div>
                         </div>
                     </div>

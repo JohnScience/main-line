@@ -55,3 +55,24 @@ pub enum LikelyResponse<T> {
     Success(LikelySuccess<T>),
     InternalServerError,
 }
+
+#[derive(specta::Type, serde::Serialize, utoipa::ToSchema)]
+pub struct UserPageData {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avatar_url: Option<String>,
+    pub username: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chess_dot_com_profile: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lichess_profile: Option<String>,
+}
+
+#[derive(specta::Type)]
+#[serde(tag = "kind")]
+pub enum GetUserPageDataResponse {
+    Success(UserPageData),
+    NotFound,
+    InternalServerError,
+}

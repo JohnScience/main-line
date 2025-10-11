@@ -3,6 +3,8 @@ use std::sync::Arc;
 use utoipa::OpenApi;
 use utoipauto::utoipauto;
 
+use shared_items_lib::id::UserId;
+
 use crate::context::Context;
 
 mod api;
@@ -34,9 +36,47 @@ impl utoipa::Modify for SecurityAddon {
     tags(
         (name = "todo", description = "Todo management endpoints.")
     ),
+    components(schemas(UserId))
     modifiers(&SecurityAddon)
 )]
 pub struct ApiDoc;
+
+macro_rules! make_trace_layer {
+    () => {
+        tower_http::trace::TraceLayer::new_for_http()
+            .on_request(|request: &axum::http::Request<_>, _span: &tracing::Span| {
+                tracing::info!("Received request: {} {}", request.method(), request.uri());
+            })
+            .on_response(
+                |response: &axum::http::Response<_>,
+                 latency: std::time::Duration,
+                 _span: &tracing::Span| {
+                    if response.status().is_success() {
+                        tracing::info!(
+                            "Response generated: {} in {} ms",
+                            response.status(),
+                            latency.as_millis()
+                        );
+                        return;
+                    } else if response.status().is_client_error() {
+                        tracing::warn!(
+                            "Response generated: {} in {} ms",
+                            response.status(),
+                            latency.as_millis()
+                        );
+                        return;
+                    } else if response.status().is_server_error() {
+                        tracing::error!(
+                            "Response generated: {} in {} ms",
+                            response.status(),
+                            latency.as_millis()
+                        );
+                        return;
+                    }
+                },
+            )
+    };
+}
 
 pub fn make_router(ctx: Arc<Context>) -> anyhow::Result<axum::Router> {
     let router = axum::Router::new();
@@ -55,6 +95,7 @@ pub fn make_router(ctx: Arc<Context>) -> anyhow::Result<axum::Router> {
 
     let router = router
         .layer(axum::middleware::from_fn(crate::middleware::log_request))
+        .layer(make_trace_layer!())
         .layer(cors_layer)
         .with_state(ctx);
     Ok(router)

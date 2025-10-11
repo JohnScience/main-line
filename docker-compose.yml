@@ -46,10 +46,11 @@ services:
         condition: service_healthy
     environment:
       RUST_BACKTRACE: full
+      RUST_LOG: "info,backend=trace,backend_lib=trace,sqlx::query=trace"
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
       BASE_FRONTEND_URL: http://localhost:3001
-      RUST_LOG: "backend=trace"
+      BASE_API_URL: http://localhost:3000
       MINIO_HOST: minio
       MINIO_PORT: 9000
     env_file:

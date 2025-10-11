@@ -4,6 +4,7 @@ use tracing::info;
 
 use mnln_env::PgEnv;
 
+pub(crate) mod bff;
 pub(crate) mod id;
 pub(crate) mod user;
 

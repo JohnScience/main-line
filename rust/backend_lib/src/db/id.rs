@@ -1,6 +1,6 @@
 // We created another type so that the mnln_core_items does not
 // depend on sqlx crate.
-#[derive(sqlx::Type, derive_more::Display, Debug)]
+#[derive(sqlx::Type, derive_more::Display, Debug, Clone, Copy)]
 #[sqlx(transparent)]
 pub(crate) struct UserId(pub(in crate::db) i32);
 
