@@ -89,14 +89,14 @@ export function UserAvatar({ avatarUrl, supportedImgFormats }: { avatarUrl: stri
         }
     }, [avatarUploadOutcome]);
 
-    return <Image
-        // src={`/api/users/${viewedUserId}/avatar`}
+    // next/image is terrible rn
+    // See <https://www.reddit.com/r/nextjs/comments/ue5i5x/should_i_just_use_img_instead_of_image/>
+    return <img
         src={avatarUrl || "/account.svg"}
         alt="User Avatar"
         width={150}
         height={150}
-        className="rounded-full w-full h-full object-cover cursor-pointer hover:brightness-75 transition-all duration-200"
+        className="rounded-full w-[250px] h-[250px] object-cover cursor-pointer hover:brightness-75 transition-all duration-200"
         onClick={() => startSelectingProfilePicture(uploadAvatarAction, supportedImgFormats)}
     />
-
 }

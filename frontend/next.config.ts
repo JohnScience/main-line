@@ -5,6 +5,16 @@ import { WebpackManifestPlugin } from "webpack-manifest-plugin";
 
 const nextConfig: NextConfig = {
   distDir: "build",
+  images: {
+    remotePatterns: [
+      {
+        "hostname": process.env.BACKEND_API_URL?.split(":")[1] ?? "localhost",
+        "port": process.env.BACKEND_API_URL?.split(":")[2] ?? "3000",
+        "pathname": "/**"
+
+      }
+    ]
+  },
   webpack: (config) => {
     const customPlugins = [
       new WebpackManifestPlugin({

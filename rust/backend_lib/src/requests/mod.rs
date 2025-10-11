@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use utoipa::OpenApi;
+use utoipa::{OpenApi, ToSchema};
 use utoipauto::utoipauto;
 
 use shared_items_lib::id::UserId;
@@ -9,6 +9,14 @@ use crate::context::Context;
 
 mod api;
 mod general;
+
+#[derive(ToSchema)]
+pub(crate) struct Binary {
+    /// The uploaded file content
+    #[schema(format = "binary")]
+    #[allow(dead_code)]
+    pub content: String, // Or Vec<u8> depending on your implementation
+}
 
 struct SecurityAddon;
 
@@ -45,32 +53,32 @@ macro_rules! make_trace_layer {
     () => {
         tower_http::trace::TraceLayer::new_for_http()
             .on_request(|request: &axum::http::Request<_>, _span: &tracing::Span| {
-                tracing::info!("Received request: {} {}", request.method(), request.uri());
+                tracing::info!(
+                    "Received request: {} {}. Headers: {:?}",
+                    request.method(),
+                    request.uri(),
+                    request.headers()
+                );
             })
             .on_response(
                 |response: &axum::http::Response<_>,
                  latency: std::time::Duration,
                  _span: &tracing::Span| {
+                    let message = format!(
+                        "Response generated: {} in {} ms. Headers: {:?}",
+                        response.status(),
+                        latency.as_millis(),
+                        response.headers()
+                    );
+
                     if response.status().is_success() {
-                        tracing::info!(
-                            "Response generated: {} in {} ms",
-                            response.status(),
-                            latency.as_millis()
-                        );
+                        tracing::info!(message);
                         return;
                     } else if response.status().is_client_error() {
-                        tracing::warn!(
-                            "Response generated: {} in {} ms",
-                            response.status(),
-                            latency.as_millis()
-                        );
+                        tracing::warn!(message);
                         return;
                     } else if response.status().is_server_error() {
-                        tracing::error!(
-                            "Response generated: {} in {} ms",
-                            response.status(),
-                            latency.as_millis()
-                        );
+                        tracing::error!(message);
                         return;
                     }
                 },

@@ -93,6 +93,16 @@ where
     Ok(key)
 }
 
+pub async fn get_avatar(env: &Env, key: &str) -> anyhow::Result<bytes::Bytes> {
+    let bucket = avatar_bucket(env)
+        .await
+        .context("Failed to get avatar bucket")?;
+    match bucket.get_object(key).await {
+        Ok(data) => Ok(data.into_bytes()),
+        Err(e) => Err(anyhow::anyhow!(e).context("get_object failed")),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

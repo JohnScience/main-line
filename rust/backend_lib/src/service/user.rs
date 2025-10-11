@@ -1,8 +1,10 @@
 use crate::service::MapErrorToUserExposed as _;
 use crate::service::MapErrorToUserOpaque as _;
 use crate::service::ServiceResult;
+use axum::response::IntoResponse as _;
 
 use axum::http::StatusCode;
+use axum::response::Response;
 
 use browser_supported_img_format::BrowserSupportedImgFormat;
 use futures_core::Stream;
@@ -273,4 +275,58 @@ pub(crate) async fn upload_user_avatar(
     }
 
     Ok(())
+}
+
+pub(crate) async fn get_user_avatar(
+    ctx: &Context,
+    user_id: mnln_core_items::id::UserId,
+) -> Response {
+    let user_id: db::id::UserId = user_id.into();
+    let avatar_s3_key = match db::user::get_avatar(&ctx.db, user_id).await {
+        Ok(Some(avatar_s3_key)) => avatar_s3_key,
+        Ok(None) => {
+            return StatusCode::NOT_FOUND.into_response();
+        }
+        Err(e) => {
+            tracing::error!(
+                "The function {mod_path}::{fn_name}(...) failed: {err}",
+                mod_path = module_path!(),
+                fn_name = stringify!(get_user_avatar),
+                err = e,
+            );
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    let avatar = match object_storage::get_avatar(&ctx.env, &avatar_s3_key).await {
+        Ok(avatar) => avatar,
+        Err(e) => {
+            tracing::error!(
+                "The function {mod_path}::{fn_name}(...) failed: {err}",
+                mod_path = module_path!(),
+                fn_name = stringify!(get_user_avatar),
+                err = e,
+            );
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    let content_type = match BrowserSupportedImgFormat::infer(&avatar_s3_key) {
+        Some(format) => format.content_type(),
+        None => {
+            tracing::error!(
+                "The function {mod_path}::{fn_name}(...) failed: unsupported image format for the user avatar file: `{avatar_s3_key}`",
+                mod_path = module_path!(),
+                fn_name = stringify!(get_user_avatar),
+            );
+            "application/octet-stream"
+        }
+    };
+
+    (
+        StatusCode::OK,
+        [(axum::http::header::CONTENT_TYPE, content_type)],
+        avatar,
+    )
+        .into_response()
 }

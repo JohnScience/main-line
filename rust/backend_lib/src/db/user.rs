@@ -233,3 +233,21 @@ pub(crate) async fn set_avatar(
     .await?;
     Ok(())
 }
+
+pub(crate) async fn get_avatar(
+    pg_pool: &sqlx::PgPool,
+    user_id: UserId,
+) -> sqlx::Result<Option<String>> {
+    let res: Option<String> = sqlx::query_scalar!(
+        r#"
+        SELECT avatar_s3_key
+        FROM users
+        WHERE id = $1
+        "#,
+        user_id.0,
+    )
+    .fetch_one(pg_pool)
+    .await?;
+
+    Ok(res)
+}
