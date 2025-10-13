@@ -1,8 +1,6 @@
 "use client";
 
-import Image from "next/image";
-
-import { startTransition, useActionState, useEffect } from "react";
+import { startTransition, useActionState, useEffect, useState } from "react";
 
 import { toast } from "sonner";
 import { handleUploadAvatarToServer } from "./actions";
@@ -61,15 +59,21 @@ function startSelectingProfilePicture(
     input.click();
 }
 
-export function UserAvatar({ avatarUrl, supportedImgFormats }: { avatarUrl: string | null; supportedImgFormats: string }) {
+export function UserAvatar({ startingAvatarUrl, supportedImgFormats }: { startingAvatarUrl: string | null; supportedImgFormats: string }) {
     const [avatarUploadOutcome, uploadAvatarAction, isAvatarUploadPending] = useActionState(handleUploadAvatarToServer, undefined);
+
+    const [avatarUrl, setAvatarUrl] = useState<string>(startingAvatarUrl || "/account.svg");
 
     useEffect(() => {
         if (!avatarUploadOutcome) {
             return;
         }
         switch (avatarUploadOutcome.kind) {
-            case "Success": break;
+            case "Success": {
+                setAvatarUrl(avatarUploadOutcome.url);
+                toast.success("Avatar uploaded successfully.");
+                break;
+            };
             case "BadRequest": {
                 toast.error("Failed to upload avatar due to client implementation error. This issue has been logged.");
                 console.error(`Failed to upload avatar: ${avatarUploadOutcome.detail}`);
@@ -92,7 +96,8 @@ export function UserAvatar({ avatarUrl, supportedImgFormats }: { avatarUrl: stri
     // next/image is terrible rn
     // See <https://www.reddit.com/r/nextjs/comments/ue5i5x/should_i_just_use_img_instead_of_image/>
     return <img
-        src={avatarUrl || "/account.svg"}
+        // https://stackoverflow.com/questions/1077041/refresh-image-with-a-new-one-at-the-same-url
+        src={avatarUrl}
         alt="User Avatar"
         width={150}
         height={150}

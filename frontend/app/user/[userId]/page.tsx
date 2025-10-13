@@ -65,7 +65,7 @@ export default async function UserPage({ params }: UserPageProps) {
                 { /* User Profile Information */}
                 <div className="min-h-[300px] w-full bg-blue-100 rounded-lg grid grid-cols-[275px_auto] items-center">
                     <div className="p-2">
-                        <UserAvatar avatarUrl={userPageData?.avatar_url || null} supportedImgFormats={supportedImgFormats} />
+                        <UserAvatar startingAvatarUrl={userPageData?.avatar_url || null} supportedImgFormats={supportedImgFormats} />
                     </div>
                     {/* Textual Information */}
                     <div className="h-full p-6">

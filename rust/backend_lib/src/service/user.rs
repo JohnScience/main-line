@@ -1,6 +1,4 @@
-use crate::service::MapErrorToUserExposed as _;
-use crate::service::MapErrorToUserOpaque as _;
-use crate::service::ServiceResult;
+use crate::links;
 use axum::response::IntoResponse as _;
 
 use axum::http::StatusCode;
@@ -17,10 +15,11 @@ use shared_items_lib::service_responses::PostLoginResponseSuccess;
 use shared_items_lib::service_responses::PostRegisterResponse;
 use shared_items_lib::service_responses::PostSaltResponse;
 use shared_items_lib::service_responses::PostSaltResponseSuccess;
+use shared_items_lib::service_responses::PostUploadUserAvatarResponse;
+use shared_items_lib::service_responses::PostUploadUserAvatarSuccess;
 
 use crate::Context;
 use crate::db;
-use crate::service::ServiceError;
 use crate::util;
 
 #[derive(serde::Deserialize, utoipa::ToSchema)]
@@ -195,42 +194,68 @@ async fn avatar_byte_stream_from_multipart<'m>(
         impl Stream<Item = Result<bytes::Bytes, std::io::Error>> + Send + Unpin,
         BrowserSupportedImgFormat,
     ),
-    ServiceError,
+    PostUploadUserAvatarResponse,
 > {
     use futures_util::stream::TryStreamExt as _;
 
-    let Some(field) = multipart.next_field().await.map_error_to_user_opaque()? else {
-        return Err(ServiceError::UserExposedError {
-            status_code: StatusCode::BAD_REQUEST,
-            detail: "Missing form field".to_string(),
-        });
+    let field = match multipart.next_field().await {
+        Ok(Some(field)) => field,
+        Ok(None) => {
+            tracing::error!(
+                "The function {mod_path}::{fn_name}(...) failed: missing the avatar field",
+                mod_path = module_path!(),
+                fn_name = stringify!(avatar_byte_stream_from_multipart),
+            );
+            return Err(PostUploadUserAvatarResponse::BadRequest {
+                detail: "Missing the avatar field".to_string(),
+            });
+        }
+        Err(err) => {
+            tracing::error!(
+                "The function {mod_path}::{fn_name}(...) failed: {err}",
+                mod_path = module_path!(),
+                fn_name = stringify!(avatar_byte_stream_from_multipart),
+                err = err,
+            );
+            return Err(PostUploadUserAvatarResponse::InternalServerError { detail: None });
+        }
     };
 
     let field_name: Option<&str> = field.name();
+
     let Some(field_name) = field_name else {
-        return Err(ServiceError::UserExposedError {
-            status_code: StatusCode::BAD_REQUEST,
-            detail: "Missing field name".to_string(),
+        tracing::error!(
+            "The function {mod_path}::{fn_name}(...) failed: missing the field name",
+            mod_path = module_path!(),
+            fn_name = stringify!(avatar_byte_stream_from_multipart),
+        );
+        return Err(PostUploadUserAvatarResponse::BadRequest {
+            detail: "Missing the field name".to_string(),
         });
     };
+
     if field_name != "avatar" {
-        return Err(ServiceError::UserExposedError {
-            status_code: StatusCode::BAD_REQUEST,
+        tracing::error!(
+            "The function {mod_path}::{fn_name}(...) failed: unexpected field name: `{field_name}`",
+            mod_path = module_path!(),
+            fn_name = stringify!(avatar_byte_stream_from_multipart),
+            field_name = field_name,
+        );
+        return Err(PostUploadUserAvatarResponse::BadRequest {
             detail: format!("Unexpected field name: `{field_name}`"),
         });
     };
 
     let file_name: Option<&str> = field.file_name();
+
     let Some(file_name) = file_name else {
-        return Err(ServiceError::UserExposedError {
-            status_code: StatusCode::BAD_REQUEST,
+        return Err(PostUploadUserAvatarResponse::BadRequest {
             detail: "Missing file name".to_string(),
         });
     };
 
     let Some(file_format) = BrowserSupportedImgFormat::infer(file_name) else {
-        return Err(ServiceError::UserExposedError {
-            status_code: StatusCode::BAD_REQUEST,
+        return Err(PostUploadUserAvatarResponse::BadRequest {
             detail: format!("Unsupported image format for the file: `{file_name}`"),
         });
     };
@@ -242,39 +267,74 @@ async fn avatar_byte_stream_from_multipart<'m>(
 
 pub(crate) async fn upload_user_avatar(
     ctx: &Context,
-    claims: JwtClaims,
+    claims: Option<JwtClaims>,
     mut multipart: axum::extract::Multipart,
-) -> ServiceResult<()> {
+) -> PostUploadUserAvatarResponse {
+    let Some(claims) = claims else {
+        tracing::warn!("post_upload_user_avatar: Missing JWT claims");
+        return PostUploadUserAvatarResponse::Unauthorized {
+            detail: "Missing or invalid JWT".to_string(),
+        };
+    };
+
     let user_id: mnln_core_items::id::UserId = claims.sub.into();
 
-    let (stream, file_format) = avatar_byte_stream_from_multipart(&mut multipart).await?;
+    let (stream, file_format) = match avatar_byte_stream_from_multipart(&mut multipart).await {
+        Ok((stream, file_format)) => (stream, file_format),
+        Err(err_resp) => return err_resp,
+    };
 
-    let s3_key = object_storage::save_avatar(&ctx.env, user_id, stream, file_format)
-        .await
-        .map_error_to_user_exposed(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to save avatar".to_string(),
-        )?;
+    let s3_key = match object_storage::save_avatar(&ctx.env, user_id, stream, file_format).await {
+        Ok(s3_key) => s3_key,
+        Err(e) => {
+            tracing::error!(
+                "The function {mod_path}::{fn_name}(...) failed: {err}",
+                mod_path = module_path!(),
+                fn_name = stringify!(upload_user_avatar),
+                err = e,
+            );
+            return PostUploadUserAvatarResponse::InternalServerError { detail: None };
+        }
+    };
 
     let user_id: db::id::UserId = user_id.into();
 
-    db::user::set_avatar(&ctx.db, user_id, &s3_key)
-        .await
-        .map_error_to_user_exposed(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to set the uploaded avatar".to_string(),
-        )?;
+    if let Err(e) = db::user::set_avatar(&ctx.db, user_id, &s3_key).await {
+        tracing::error!(
+            "The function {mod_path}::{fn_name}(...) failed: {err}",
+            mod_path = module_path!(),
+            fn_name = stringify!(upload_user_avatar),
+            err = e,
+        );
+        return PostUploadUserAvatarResponse::InternalServerError {
+            detail: Some("Failed to set the uploaded avatar".to_string()),
+        };
+    };
 
     // TODO: find a way to do this via a drop guard
-    let none_field = multipart.next_field().await.map_error_to_user_opaque()?;
-    if none_field.is_some() {
-        return Err(ServiceError::UserExposedError {
-            status_code: StatusCode::BAD_REQUEST,
-            detail: "Unexpected extra form field".to_string(),
-        });
-    }
+    match multipart.next_field().await {
+        Ok(Some(_)) => {
+            return PostUploadUserAvatarResponse::BadRequest {
+                detail: "Unexpected extra form field".to_string(),
+            };
+        }
+        Ok(None) => (),
+        Err(e) => {
+            tracing::error!(
+                "The function {mod_path}::{fn_name}(...) failed: {err}",
+                mod_path = module_path!(),
+                fn_name = stringify!(upload_user_avatar),
+                err = e,
+            );
+            return PostUploadUserAvatarResponse::InternalServerError { detail: None };
+        }
+    };
 
-    Ok(())
+    let user_id: mnln_core_items::id::UserId = user_id.into();
+
+    let url = links::avatar_url(&ctx.env, user_id);
+
+    PostUploadUserAvatarResponse::Success(PostUploadUserAvatarSuccess { url })
 }
 
 pub(crate) async fn get_user_avatar(

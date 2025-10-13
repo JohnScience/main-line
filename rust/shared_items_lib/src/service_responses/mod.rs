@@ -76,3 +76,24 @@ pub enum GetUserPageDataResponse {
     NotFound,
     InternalServerError,
 }
+
+#[derive(specta::Type, serde::Serialize)]
+pub struct PostUploadUserAvatarSuccess {
+    pub url: String,
+}
+
+#[derive(specta::Type, serde::Serialize)]
+#[serde(tag = "kind")]
+pub enum PostUploadUserAvatarResponse {
+    Success(PostUploadUserAvatarSuccess),
+    BadRequest {
+        detail: String,
+    },
+    InternalServerError {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        detail: Option<String>,
+    },
+    Unauthorized {
+        detail: String,
+    },
+}

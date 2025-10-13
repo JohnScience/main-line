@@ -14,14 +14,14 @@ use axum::{
 
 use shared_items_lib::service_responses::{
     PostLoginResponse, PostLoginResponseSuccess, PostRegisterResponse, PostSaltResponse,
-    PostSaltResponseSuccess,
+    PostSaltResponseSuccess, PostUploadUserAvatarResponse, PostUploadUserAvatarSuccess,
 };
 
 use crate::context::Context;
 use crate::params::UserIdPathParams;
 use crate::requests::Binary;
+use crate::service;
 use crate::service::user::{RegisterRequest, SaltRequest, UploadUserAvatarRequest};
-use crate::service::{self, ServiceError};
 
 #[utoipa::path(
     post,
@@ -97,7 +97,7 @@ async fn post_salt(
     path = "/api/user/upload-avatar",
     tag = "user",
     responses(
-        (status = 200, description = "Avatar uploaded successfully", body = ()),
+        (status = 200, description = "Avatar uploaded successfully", body = String),
         (status = 400, description = "Bad request", body = String),
         (status = 401, description = "Missing or invalid JWT", body = String),
         (status = 500, description = "Internal server error", body = Option<String>),
@@ -112,19 +112,22 @@ async fn post_upload_user_avatar(
     Extension(claims): Extension<Option<shared_items_lib::JwtClaims>>,
     multipart: axum::extract::Multipart,
 ) -> Response {
-    let Some(claims) = claims else {
-        tracing::warn!("post_upload_user_avatar: Missing JWT claims");
-        return (StatusCode::UNAUTHORIZED, "Missing or invalid JWT").into_response();
-    };
     match service::user::upload_user_avatar(&ctx, claims, multipart).await {
-        Ok(()) => StatusCode::OK.into_response(),
-        Err(ServiceError::UserExposedError {
-            status_code,
-            detail,
-        }) => (status_code, detail).into_response(),
-        Err(ServiceError::UserOpaqueError { anyhow_err }) => {
-            tracing::error!("Internal server error: {anyhow_err}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        PostUploadUserAvatarResponse::Success(PostUploadUserAvatarSuccess { url }) => {
+            (StatusCode::OK, url).into_response()
+        }
+        PostUploadUserAvatarResponse::BadRequest { detail } => {
+            (StatusCode::BAD_REQUEST, detail).into_response()
+        }
+        PostUploadUserAvatarResponse::InternalServerError { detail } => {
+            if let Some(detail) = detail {
+                (StatusCode::INTERNAL_SERVER_ERROR, detail).into_response()
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+        }
+        PostUploadUserAvatarResponse::Unauthorized { detail } => {
+            (StatusCode::UNAUTHORIZED, detail).into_response()
         }
     }
 }

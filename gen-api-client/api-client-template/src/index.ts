@@ -18,7 +18,7 @@ import {
     postUploadUserAvatar as postUploadUserAvatarInner,
     getUserPageData as getUserPageDataInner,
 } from "./gen-client/sdk.gen";
-import { GetUserPageDataResponse, JwtString, LikelyResponse, PostLoginResponse, PostRegisterResponse, PostSaltResponse } from "./gen_shared_types";
+import { GetUserPageDataResponse, JwtString, LikelyResponse, PostLoginResponse, PostRegisterResponse, PostSaltResponse, PostUploadUserAvatarResponse } from "./gen_shared_types";
 
 export * as "gen_shared_types" from "./gen_shared_types";
 
@@ -92,17 +92,23 @@ type PostUploadUserAvatarResult =
 
 export async function postUploadUserAvatar(
     options: HttpMethodCallOptions<typeof postUploadUserAvatarInner>
-): Promise<PostUploadUserAvatarResult> {
+): Promise<PostUploadUserAvatarResponse> {
     modifyOptions(options);
     const result = await postUploadUserAvatarInner(options as any);
     const statusCode = result.response.status as keyof PostUploadUserAvatarResponses | keyof PostUploadUserAvatarErrors;
     switch (statusCode) {
-        case 200: return { "kind": "Success" };
+        case 200: {
+            const url: PostUploadUserAvatarResponses[200] = result.data!;
+            return { "kind": "Success", url };
+        }
         case 400: {
             const detail: PostUploadUserAvatarErrors[400] = result.error!;
             return { "kind": "BadRequest", detail };
         };
-        case 401: return { "kind": "Unauthorized" };
+        case 401: {
+            const detail: PostUploadUserAvatarErrors[401] = result.error!;
+            return { "kind": "Unauthorized", detail };
+        };
         case 500: {
             const detail: PostUploadUserAvatarErrors[500] = result.error!;
             return { "kind": "InternalServerError", ...{ detail } };
