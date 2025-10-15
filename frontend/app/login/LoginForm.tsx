@@ -17,6 +17,7 @@ import { base64ToUint8Array } from "@/app/_util/base64";
 
 import { handleClientLoginAttempt } from "./actions";
 import { MAX_CHESS_DOT_COM_USERNAME_LENGTH, MAX_LICHESS_USERNAME_LENGTH, MAX_PASSWORD_LENGTH, MAX_USERNAME_LENGTH, MIN_CHESS_DOT_COM_USERNAME_LENGTH, MIN_LICHESS_USERNAME_LENGTH, MIN_PASSWORD_LENGTH, MIN_USERNAME_LENGTH } from "./config";
+import { LoadingSpinner } from "@/app/_components/LoadingSpinner";
 
 type PasswordFragment<T extends "client" | "server"> = T extends "client" ? { password: string } : { password_hash: string };
 
@@ -229,8 +230,9 @@ export default function LoginForm() {
                         <button
                             type="submit"
                             className="bg-blue-500 text-white py-2 rounded hover:bg-blue-600 transition"
+                            disabled={isLoginPending}
                         >
-                            Sign In
+                            {isLoginPending ? <LoadingSpinner inline={true} size="w-6 h-6" /> : "Sign In"}
                         </button>
                     </Form>
                 ) : (
@@ -270,19 +272,15 @@ export default function LoginForm() {
                                 minLength={MIN_CHESS_DOT_COM_USERNAME_LENGTH}
                                 maxLength={MAX_CHESS_DOT_COM_USERNAME_LENGTH}
                             />
-                            <input
-                                type="text"
-                                placeholder="Lichess.org Username (optional)"
-                                className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                name="lichessDotOrgUsername"
-                                minLength={MIN_LICHESS_USERNAME_LENGTH}
-                                maxLength={MAX_LICHESS_USERNAME_LENGTH}
-                            />
+                            <p className="text-sm text-gray-500">
+                                Note: Sign-up may take a while as we use OWASP-recommended Argon2id hashing algorithm, which is slow.
+                            </p>
                             <button
                                 type="submit"
-                                className="bg-green-500 text-white py-2 rounded hover:bg-green-600 transition"
+                                className="bg-green-500 text-white py-2 rounded hover:bg-green-600 transition flex items-center justify-center"
+                                disabled={isLoginPending}
                             >
-                                Sign Up
+                                {isLoginPending ? <LoadingSpinner inline={true} size="w-6 h-6" /> : "Sign Up"}
                             </button>
                         </Form>
                     </>
