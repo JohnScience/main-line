@@ -1,20 +1,17 @@
 "use server";
 
-import { cookies } from "next/headers";
-
 import TopNavBar from "@/app/_components/TopNavBar";
 import Footer from "@/app/_components/Footer";
-import { Cookies } from "@/app/_util/cookies";
+import { Cookies, getWrappedTypedCookie } from "@/app/_util/cookies";
+import { JwtClaims } from "api-client/build/gen_shared_types";
 
 export default async function Home() {
-  const cookieStore = await cookies();
-  const accessToken = cookieStore.get(Cookies.ACCESS_TOKEN);
-  const loggedIn = !!accessToken;
+  const claims: JwtClaims | null = await getWrappedTypedCookie(Cookies.ACCESS_TOKEN, "frontend-server").value ?? null;
 
   return (
     <div className="font-sans grid grid-rows-[auto_1fr_20px] items-center justify-items-center min-h-screen">
       {/* Navigation Bar */}
-      <TopNavBar userInfo={{ loggedIn }} />
+      <TopNavBar userInfo={{ claims, avatarSource: null }} />
 
       {/* Main Content */}
       <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start p-8 sm:p-20">

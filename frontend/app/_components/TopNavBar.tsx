@@ -6,31 +6,52 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { Optional } from "@/app/_util/types";
+import { inferRuntimeEnvironment } from "@/app/_util/runtime";
 import { CONTACT_EMAIL } from "@/app/config";
 import { LogoutButton } from "./LogoutButton";
+import { JwtClaims } from "api-client/build/gen_shared_types";
+
+
+const DEFAULT_AVATAR_SOURCE = "/account.svg";
 
 export interface UserInfo {
-    loggedIn: boolean;
-    avatarSource: string;
+    claims: JwtClaims | null;
+    avatarSource: string | null;
 }
 
 interface Props {
-    userInfo?: Optional<UserInfo, "avatarSource">;
+    userInfo?: Partial<UserInfo>;
     contactEmail?: string;
     logoWidth?: number;
     logoHeight?: number;
 }
 
 const DEFAULT_USER_INFO: UserInfo = {
-    loggedIn: false,
-    avatarSource: "/account.svg",
+    claims: null,
+    avatarSource: DEFAULT_AVATAR_SOURCE,
 };
 
 export default function TopNavBar(
     { contactEmail, logoWidth, logoHeight, userInfo: initUserInfo }: Props
 ) {
+    let runtime = inferRuntimeEnvironment();
+
+    switch (runtime) {
+        case "web-worker": throw new Error("TopNavBar cannot be rendered in a web-worker environment");
+        case "frontend-server": {
+            if (initUserInfo?.claims === undefined) {
+                throw new Error("When rendering TopNavBar on the frontend-server, userInfo.claims must be provided");
+            }
+            if (initUserInfo?.avatarSource === undefined) {
+                throw new Error("When rendering TopNavBar on the frontend-server, userInfo.avatarSource must be provided");
+            }
+            break;
+        }
+        case "browser": break;
+    };
+
     initUserInfo = initUserInfo ?? DEFAULT_USER_INFO;
-    initUserInfo.avatarSource = initUserInfo.avatarSource ?? "/account.svg";
+    initUserInfo.avatarSource = initUserInfo.avatarSource ?? DEFAULT_AVATAR_SOURCE;
 
     logoWidth = logoWidth ?? 120;
     logoHeight = logoHeight ?? 30;
@@ -56,7 +77,7 @@ export default function TopNavBar(
 
                 {/* Right side (optional links or buttons) */}
                 <div className="flex items-center gap-6 text-sm font-medium" >
-                    <Link href="/" className="hover:underline hover:underline-offset-4">Home</Link>
+                    <Link href="/" className="hover:underline hover:underline-offset-4">Main Page</Link>
                     { /*
                 <a
                     href="/about"
@@ -65,6 +86,7 @@ export default function TopNavBar(
                     About
                 </a>
                 */ }
+                    {userInfo.claims && <Link href={`/user/${userInfo.claims.sub}`} className="hover:underline hover:underline-offset-4">Profile</Link>}
                     <Link href="/same-device" className="hover:underline hover:underline-offset-4">Play</Link>
                     <a
                         href={`mailto:${contactEmail}`}
@@ -73,7 +95,7 @@ export default function TopNavBar(
                         Contact
                     </a>
                     {
-                        !userInfo.loggedIn ?
+                        userInfo.claims === undefined ?
                             <a
                                 className="flex items-center gap-2 hover:underline hover:underline-offset-4"
                                 href="/login"
@@ -81,7 +103,7 @@ export default function TopNavBar(
                                 Log In
                                 <Image
                                     aria-hidden
-                                    src={userInfo.avatarSource}
+                                    src={userInfo.avatarSource ?? DEFAULT_AVATAR_SOURCE}
                                     alt="Account icon"
                                     width={32}
                                     height={32}
@@ -94,7 +116,7 @@ export default function TopNavBar(
                                 Logout
                                 <Image
                                     aria-hidden
-                                    src={userInfo.avatarSource}
+                                    src={userInfo.avatarSource ?? DEFAULT_AVATAR_SOURCE}
                                     alt="Account icon"
                                     width={32}
                                     height={32}

@@ -1,16 +1,13 @@
 "use server";
 
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-
-import { jwtDecode } from "jwt-decode";
 
 import { getSupportedImgFormats, getUserPageData } from "api-client";
 import { JwtClaims, LikelyResponse, UserId } from "api-client/build/gen_shared_types";
 
 import Footer from "@/app/_components/Footer";
 import TopNavBar from "@/app/_components/TopNavBar";
-import { Cookies } from "@/app/_util/cookies";
+import { Cookies, getWrappedTypedCookie } from "@/app/_util/cookies";
 import { UserAvatar } from "./UserAvatar";
 
 type UserPageProps = {
@@ -21,14 +18,8 @@ type UserPageProps = {
 
 export default async function UserPage({ params }: UserPageProps) {
     const { userId: viewedUserId } = await params;
-    const cookieStore = await cookies();
-    const accessToken = cookieStore.get(Cookies.ACCESS_TOKEN);
-    let viewingUserId: UserId | null = null;
-    if (accessToken) {
-        const jwt = jwtDecode<JwtClaims>(accessToken.value);
-        viewingUserId = jwt.sub;
-    }
-    const loggedIn = !!accessToken;
+    const claims: JwtClaims | null = await getWrappedTypedCookie(Cookies.ACCESS_TOKEN, "frontend-server").value ?? null;
+    const viewingUserId: UserId | undefined = claims?.sub;
 
     const supportedImgFormatsResp: LikelyResponse<string> = await getSupportedImgFormats({});
 
@@ -59,7 +50,7 @@ export default async function UserPage({ params }: UserPageProps) {
     return (
         <div className="font-sans grid grid-rows-[auto_1fr_auto] justify-items-center min-h-screen">
             {/* Navigation Bar */}
-            <TopNavBar userInfo={{ loggedIn }} />
+            <TopNavBar userInfo={{ claims, avatarSource: null }} />
             {/* Main Content */}
             <main className="p-10 w-full">
                 { /* User Profile Information */}
