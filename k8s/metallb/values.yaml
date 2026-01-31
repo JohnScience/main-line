@@ -1,0 +1,13 @@
+# MetalLB IP Address Pool Configuration
+ipAddressPool:
+  name: kind-pool
+  # IP range for LoadBalancer services
+  # These will be calculated dynamically based on the Kind network subnet
+  addressRangeStart: "172.19.255.200"
+  addressRangeEnd: "172.19.255.250"
+
+l2Advertisement:
+  name: kind-l2-advert
+  # Advertise all IP address pools
+  ipAddressPools:
+    - kind-pool

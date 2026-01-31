@@ -1,0 +1,22 @@
+FROM debian:bookworm-slim
+
+# Install stockfish and dependencies
+RUN apt-get update && apt-get install -y \
+    stockfish \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install websocat
+RUN wget -O /usr/local/bin/websocat https://github.com/vi/websocat/releases/download/v1.13.0/websocat.x86_64-unknown-linux-musl \
+    && chmod +x /usr/local/bin/websocat
+
+# Create a wrapper script that properly launches stockfish
+RUN echo '#!/bin/sh\nexec stdbuf -oL /usr/games/stockfish' > /usr/local/bin/stockfish-wrapper.sh \
+    && chmod +x /usr/local/bin/stockfish-wrapper.sh
+
+# Expose WebSocket port
+EXPOSE 9002
+
+# Start websocat with exec mode instead of cmd mode to avoid subprocess issues
+# The --text flag ensures text mode, exec mode directly exec's the process
+CMD ["websocat", "--text", "ws-l:0.0.0.0:9002", "exec:/usr/local/bin/stockfish-wrapper.sh"]

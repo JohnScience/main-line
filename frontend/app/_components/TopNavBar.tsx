@@ -88,6 +88,7 @@ export default function TopNavBar(
                 */ }
                     {userInfo.claims && <Link href={`/user/${userInfo.claims.sub}`} className="hover:underline hover:underline-offset-4">Profile</Link>}
                     <Link href="/same-device" className="hover:underline hover:underline-offset-4">Play</Link>
+                    <Link href="/analyze" className="hover:underline hover:underline-offset-4">Analyze</Link>
                     <a
                         href={`mailto:${contactEmail}`}
                         className="hover:underline hover:underline-offset-4"

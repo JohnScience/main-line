@@ -1,0 +1,18 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: kubernetes-dashboard-direct
+  namespace: kubernetes-dashboard
+spec:
+  parentRefs:
+    - name: main-line-gateway
+      namespace: default
+      sectionName: dashboard-direct # Targets the 8002 listener
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: kubernetes-dashboard-kong-proxy
+          port: 80

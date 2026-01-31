@@ -1,0 +1,17 @@
+# Gateway configuration
+gateway:
+  name: main-line-gateway
+  namespace: default
+
+# Dashboard service configuration
+dashboard:
+  serviceName: kubernetes-dashboard-kong-proxy
+  servicePort: 80
+
+# Hostname configuration
+hostnames:
+  # Domain-based access
+  domain:
+    - dashboard.main-line.local
+  # IP-based access (set dynamically via --set hostnames.gatewayIP=<ip>)
+  gatewayIP: ""

@@ -3,7 +3,13 @@ import subprocess
 from typing import TypedDict
 from pathlib import Path
 
-from scripts.common.docker import copy_from_container, create_container, remove_container
+from scripts.common.docker import (
+    BuildOptions,
+    build_docker_image,
+    copy_from_container,
+    create_container,
+    remove_container,
+)
 
 from .git import get_git_root
 
@@ -85,7 +91,7 @@ DOCKER_IMAGES: list[DockerImageDesc] = [
     # This is an *application image* that is built using `main-line-backend_lib` (`Dockerfile.backend_lib`)
     # and is used to run the backend service.
     {
-        "name": None,
+        "name": "main-line-backend",
         "dockerfile": "Dockerfile.backend",
         "is_intermediate": False,
         "img_dependencies": ["main-line-backend_lib"],
@@ -124,10 +130,20 @@ DOCKER_IMAGES: list[DockerImageDesc] = [
     # This is an *application image* that is built using the `main-line-api_client` (`Dockerfile.api_client`)
     # and is used to run the frontend application.
     {
-        "name": None,
+        "name": "main-line-frontend",
         "dockerfile": "Dockerfile.frontend",
         "is_intermediate": False,
         "img_dependencies": ["main-line-api_client"],
+        "purpose_specific_data": PurposeSpecificDataVariant.Application()
+    },
+    # This is an *application image* that is built using a standard Dockerfile
+    # and is used to run the Stockfish chess engine and expose it as a service
+    # using the UCI protocol over WebSockets via websocat.
+    {
+        "name": "main-line-stockfish",
+        "dockerfile": "Dockerfile.stockfish",
+        "is_intermediate": False,
+        "img_dependencies": [],
         "purpose_specific_data": PurposeSpecificDataVariant.Application()
     }
 ]
@@ -182,6 +198,42 @@ def extract_artifact(image: DockerImageDesc, tabulation: str):
         copy_from_container(image['name'], psd.artifact_path, dest_path)
         print(f"{tabulation}\tExtracted to {dest_path}")
     remove_container(image['name'])
+
+def get_images_in_build_order() -> list[DockerImageDesc]:
+    """
+    Return all images in the correct build order based on dependencies.
+    
+    The DOCKER_IMAGES list is already ordered correctly (verified by check_orderedness),
+    so we can just return it as-is.
+    
+    Returns:
+        list[DockerImageDesc]: Images in dependency order
+    """
+    return DOCKER_IMAGES.copy()
+
+def build_all_images(options: BuildOptions) -> list[str]:
+    """
+    Build all Docker images in dependency order.
+    
+    Args:
+        options: Build options including force_rebuild and private_registry settings
+    
+    Returns:
+        list[str]: List of successfully built image names
+    """
+    print(f"{options['tabulation']}Building all Docker images in dependency order...")
+    built_images = []
+    
+    for img in get_images_in_build_order():
+        if img["name"] is None:
+            print(f"{options['tabulation']}\tSkipping image with no name: {img['dockerfile']}")
+            continue
+        
+        build_docker_image(img, {**options, "tabulation": options["tabulation"] + "\t"})
+        built_images.append(img["name"])
+    
+    print(f"{options['tabulation']}Successfully built {len(built_images)} images.")
+    return built_images
 
 check_comprehensiveness()
 check_orderedness()

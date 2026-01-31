@@ -1,0 +1,118 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "minio.fullname" . }}
+  labels:
+    {{- include "minio.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "minio.fullname" . }}-headless
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "minio.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "minio.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+      - name: minio
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command:
+          - minio
+          - server
+          - /data
+          - --console-address
+          - ":9001"
+          {{- if .Values.tls.enabled }}
+          - --certs-dir
+          - /root/.minio/certs
+          {{- end }}
+        env:
+        - name: MINIO_ROOT_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "minio.fullname" . }}-secret
+              key: rootUser
+        - name: MINIO_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "minio.fullname" . }}-secret
+              key: rootPassword
+        {{- if .Values.buckets }}
+        - name: MINIO_DEFAULT_BUCKETS
+          value: {{ include "minio.bucketList" . }}
+        {{- end }}
+        ports:
+        - name: api
+          containerPort: 9000
+          protocol: TCP
+        - name: console
+          containerPort: 9001
+          protocol: TCP
+        {{- if .Values.healthcheck.enabled }}
+        livenessProbe:
+          httpGet:
+            path: /minio/health/live
+            port: api
+            {{- if .Values.tls.enabled }}
+            scheme: HTTPS
+            {{- else }}
+            scheme: HTTP
+            {{- end }}
+          initialDelaySeconds: {{ .Values.healthcheck.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.healthcheck.livenessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.healthcheck.livenessProbe.timeoutSeconds }}
+        readinessProbe:
+          httpGet:
+            path: /minio/health/ready
+            port: api
+            {{- if .Values.tls.enabled }}
+            scheme: HTTPS
+            {{- else }}
+            scheme: HTTP
+            {{- end }}
+          initialDelaySeconds: {{ .Values.healthcheck.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.healthcheck.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.healthcheck.readinessProbe.timeoutSeconds }}
+        {{- end }}
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        {{- if .Values.tls.enabled }}
+        - name: certs
+          mountPath: /root/.minio/certs
+          readOnly: true
+        {{- end }}
+      {{- if .Values.tls.enabled }}
+      volumes:
+      - name: certs
+        secret:
+          secretName: {{ .Values.tls.certSecret }}
+      {{- end }}
+  {{- if .Values.persistence.enabled }}
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+      labels:
+        {{- include "minio.labels" . | nindent 8 }}
+    spec:
+      accessModes:
+        - {{ .Values.persistence.accessMode }}
+      {{- if .Values.persistence.storageClass }}
+      storageClassName: {{ .Values.persistence.storageClass }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.persistence.size }}
+  {{- else }}
+  # For non-persistent mode, use emptyDir volumes
+  template:
+    spec:
+      volumes:
+      - name: data
+        emptyDir: {}
+  {{- end }}

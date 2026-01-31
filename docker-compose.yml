@@ -86,3 +86,11 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
+
+  stockfish:
+    build:
+      context: ./
+      dockerfile: Dockerfile.stockfish
+    ports:
+      - "9002:9002"
+    restart: unless-stopped
