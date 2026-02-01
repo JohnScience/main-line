@@ -8,19 +8,13 @@ apiVersion: kind.x-k8s.io/v1alpha4
 # Cluster nodes
 nodes:
   - role: control-plane
-    image: kindest/node:v1.31.0@sha256:53df588e04085fd41ae12de0c3fe4c72f7013bba32a20e7325357a1ac94ba865
+    image: kindest/node:v1.34.0
     kubeadmConfigPatches:
       - |
         kind: InitConfiguration
         nodeRegistration:
           kubeletExtraArgs:
             node-labels: "ingress-ready=true"
-            cgroup-driver: "systemd"
-            fail-swap-on: "false"
-      - |
-        kind: KubeletConfiguration
-        cgroupDriver: systemd
-        failSwapOn: false
     extraPortMappings:
       # Expose only services that need host access
       - containerPort: 80 # Gateway API HTTP
@@ -47,7 +41,12 @@ nodes:
       - containerPort: 8002 # Kubernetes Dashboard direct access
         hostPort: 8002
         protocol: TCP
-
+  - role: worker
+    image: kindest/node:v1.34.0
+  - role: worker
+    image: kindest/node:v1.34.0
+  - role: worker
+    image: kindest/node:v1.34.0
 # Configure containerd to use local registry
 # This allows pods to pull images from 'main-line-registry:5000'
 containerdConfigPatches:

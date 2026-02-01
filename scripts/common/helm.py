@@ -141,3 +141,36 @@ def deploy_envoy_gateway_via_helm(namespace: str = "envoy-gateway-system") -> bo
         print(f"✗ Failed to deploy Envoy Gateway: {e}")
         return False
     
+def add_grafana_helm_repo() -> bool:
+    """
+    Adds the Grafana Helm repository.
+    
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    print("\nAdding Grafana Helm repository...")
+    
+    # Check if helm is installed
+    if not is_helm_installed():
+        print("✗ 'helm' is not installed or not in PATH")
+        return False
+    
+    try:
+        result = subprocess.run(
+            ["helm", "repo", "add", "grafana", "https://grafana.github.io/helm-charts"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding='utf-8'
+        )
+        
+        if result.returncode == 0:
+            print("✓ Successfully added Grafana Helm repository")
+            return True
+        else:
+            print("✗ Failed to add Grafana Helm repository")
+            print(result.stderr)
+            return False
+    except Exception as e:
+        print(f"✗ Failed to add Helm repository: {e}")
+        return False

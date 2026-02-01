@@ -70,6 +70,7 @@ class Step:
     step_kind: StepKindData = None  # Kind-specific data about how the step is controlled
     cli_arg_mappings: dict[str, str] = None  # Maps step arg names to CLI arg names
     cli_args: list[CliArg] = None  # CLI arguments this step uses
+    depends_on: list[str] = None  # Names of steps this step depends on
     
     def __post_init__(self):
         if self.args is None:
@@ -155,7 +156,10 @@ class StepContext:
         self.steps = steps
         self.auto_rollback = auto_rollback
         self.completed_steps: list[Step] = []
-        self.all_outputs: list[Output] = []
+        self.all_outputs: list[Output] = [Output(
+            title="On Windows and MacOS, the bridge network has to be exposed via cloud-provider-kind. See <https://kind.sigs.k8s.io/docs/user/known-issues/#docker-desktop-for-macos-and-windows>",
+            body="To expose the kind cluster network, run 'python scripts/expose_network.py' after bootstrapping the kind cluster."
+        )]
     
     def execute_all(self) -> bool:
         """

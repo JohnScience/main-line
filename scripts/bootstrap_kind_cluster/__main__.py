@@ -924,7 +924,8 @@ ALL_STEPS = [
                 help='Force rebuild Docker images',
                 step_description='Rebuild all images even if they already exist'
             )
-        ]
+        ],
+        depends_on=['start_registry']
     ),
     Step(
         name="initialize_kind_cluster",
@@ -943,7 +944,8 @@ ALL_STEPS = [
         rollback=None,
         args={'registry_name': 'main-line-registry', 'cluster_name': KIND_CLUSTER_NAME},
         perform_flag='connect_to_kind_only',
-        step_kind=StepKind.Required()
+        step_kind=StepKind.Required(),
+        depends_on=['initialize_kind_cluster', 'start_registry'],
     ),
     Step(
         name="install_gateway_api_crds",
@@ -952,7 +954,8 @@ ALL_STEPS = [
         rollback=None,
         args={'cluster_name': KIND_CLUSTER_NAME},
         perform_flag='install_gateway_api_crds_only',
-        step_kind=StepKind.Required()
+        step_kind=StepKind.Required(),
+        depends_on=['initialize_kind_cluster'],
     ),
     Step(
         name="install_metallb",
@@ -961,7 +964,8 @@ ALL_STEPS = [
         rollback=None,
         args={'cluster_name': KIND_CLUSTER_NAME},
         perform_flag='install_metallb_only',
-        step_kind=StepKind.Required()
+        step_kind=StepKind.Required(),
+        depends_on=['initialize_kind_cluster'],
     ),
     Step(
         name="deploy_gateway_api_implementation",
@@ -973,7 +977,8 @@ ALL_STEPS = [
             'namespace': 'envoy-gateway-system'
         },
         perform_flag='deploy_gateway_api_implementation_only',
-        step_kind=StepKind.Required()
+        step_kind=StepKind.Required(),
+        depends_on=['install_gateway_api_crds'],
     ),
     Step(
         name="create_gatewayclass",
@@ -982,7 +987,8 @@ ALL_STEPS = [
         rollback=None,
         args={'cluster_name': KIND_CLUSTER_NAME},
         perform_flag='create_gatewayclass_only',
-        step_kind=StepKind.Required()
+        step_kind=StepKind.Required(),
+        depends_on=['deploy_gateway_api_implementation']
     ),
     Step(
         name="create_gateway",
@@ -994,7 +1000,8 @@ ALL_STEPS = [
             'namespace': 'envoy-gateway-system'
         },
         perform_flag='create_gateway_only',
-        step_kind=StepKind.Required()
+        step_kind=StepKind.Required(),
+        depends_on=['create_gatewayclass']
     ),
     Step(
         name="deploy_kubernetes_dashboard",
@@ -1003,7 +1010,8 @@ ALL_STEPS = [
         rollback=None,
         args={'cluster_name': KIND_CLUSTER_NAME},
         perform_flag='deploy_dashboard_only',
-        step_kind=StepKind.Optional(enable_flag='deploy_dashboard')
+        step_kind=StepKind.Optional(enable_flag='deploy_dashboard'),
+        depends_on=['initialize_kind_cluster']
     ),
     Step(
         name="create_kubernetes_dashboard_admin",
@@ -1012,7 +1020,8 @@ ALL_STEPS = [
         rollback=None,
         args={'cluster_name': KIND_CLUSTER_NAME},
         perform_flag='create_dashboard_admin_only',
-        step_kind=StepKind.Optional(enable_flag='deploy_dashboard')
+        step_kind=StepKind.Optional(enable_flag='deploy_dashboard'),
+        depends_on=['deploy_kubernetes_dashboard']
     ),
     Step(
         name="create_kubernetes_dashboard_httproute",
@@ -1021,7 +1030,16 @@ ALL_STEPS = [
         rollback=None,
         args={'cluster_name': KIND_CLUSTER_NAME},
         perform_flag="create_kubernetes_dashboard_httproute_only",
-        step_kind=StepKind.Optional(enable_flag='deploy_dashboard')
+        step_kind=StepKind.Optional(enable_flag='deploy_dashboard'),
+        depends_on=['create_gateway', 'create_kubernetes_dashboard_admin']
+    ),
+    Step(
+        name="add_grafana_chart_repo",
+        description="Adds the Grafana Helm chart repository",
+        perform=lambda **kwargs: helm_module.add_grafana_helm_repo(),
+        rollback=None,
+        step_kind=StepKind.Required(),
+        depends_on=['initialize_kind_cluster']
     )
 ]
 
