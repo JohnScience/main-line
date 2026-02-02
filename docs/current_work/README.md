@@ -14,19 +14,31 @@ Once observability is in place, the plan is to move existing services into the K
 
 ## Observability Stack Introduction Plan
 
-1. Prepare Helm charts or manifests for each component (recommended: use official Helm charts).
-2. Deploy Prometheus for metrics collection.
-	- Configure Prometheus to scrape metrics from your services and Kubernetes components.
-3. Deploy OpenTelemetry Collector for traces and metrics.
-	- Configure it to receive traces/metrics from your apps and export traces to Tempo, metrics to Prometheus.
+### Step-by-step Plan
+
+1. Deploy the OpenTelemetry Collector (OTEL) in the cluster as the first observability component.
+	- Verify that the OTEL collector is running and can receive telemetry data.
+
+2. Introduce services one-by-one into the cluster.
+	- After each service is deployed, configure it to send telemetry (metrics, logs, traces) to the OTEL collector.
+	- At each step, verify that the OTEL collector is receiving and processing data from the new service.
+	- Ensure that you can view the produced telemetry in the appropriate backend (Prometheus, Tempo, Loki) and in Grafana.
+
+3. Deploy Prometheus for metrics collection.
+	- Configure Prometheus to scrape metrics from OTEL collector and services.
+
 4. Deploy Tempo for distributed tracing.
-	- Connect OpenTelemetry Collector to Tempo.
+	- Connect OTEL collector to Tempo for trace export.
+
 5. Deploy Loki for log aggregation.
-	- Configure your apps or cluster logging to send logs to Loki.
+	- Configure OTEL collector and services to send logs to Loki.
+
 6. Deploy Grafana Dashboard.
 	- Add Prometheus, Tempo, and Loki as data sources.
 	- Import or create dashboards for metrics, traces, and logs.
+
 7. Configure service discovery and authentication as needed.
-8. Test the full observability pipeline: metrics, logs, and traces should appear in Grafana.
+
+8. Continuously test and verify the observability pipeline after each new service is added, ensuring all telemetry is visible in Grafana.
 
 *Note: the document above is AI-generated and may require further refinement.*
