@@ -1,4 +1,7 @@
+from pathlib import Path
 import subprocess
+
+from scripts.common import git
 
 
 def is_helm_installed() -> bool:
@@ -173,4 +176,49 @@ def add_grafana_helm_repo() -> bool:
             return False
     except Exception as e:
         print(f"✗ Failed to add Helm repository: {e}")
+        return False
+
+def deploy_loki_via_helm(namespace: str = "loki") -> bool:
+    """
+    Deploys Loki for log aggregation using Helm.
+    
+    Args:
+        namespace: Kubernetes namespace to deploy Loki into
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    print(f"\nDeploying Loki in namespace '{namespace}' via Helm...")
+
+    git_root = git.get_git_root()
+
+    if not git_root:
+        print("✗ Could not determine Git root directory.")
+        return False
+    
+    values_file_path = Path(git_root) / "k8s" / "loki" / "values.yaml"
+    
+    try:
+        result = subprocess.run(
+            [
+                "helm", "upgrade", "--install", "loki", "grafana/loki",
+                "--values", str(values_file_path),
+                "--namespace", namespace,
+                "--create-namespace",
+                
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding='utf-8'
+        )
+        
+        if result.returncode == 0:
+            print("✓ Successfully deployed Loki via Helm")
+            return True
+        else:
+            print("✗ Failed to deploy Loki via Helm")
+            print(result.stderr)
+            return False
+    except Exception as e:
+        print(f"✗ Failed to deploy Loki: {e}")
         return False
