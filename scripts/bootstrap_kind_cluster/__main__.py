@@ -874,6 +874,123 @@ def install_metallb(cluster_name: str = KIND_CLUSTER_NAME) -> bool:
         print(f"✗ Failed to install MetalLB: {e}")
         return False
 
+def wait_for_otel_operator() -> bool:
+    try:
+        subprocess.run(
+            [
+                "kubectl",
+                "wait",
+                "--for=condition=available",
+                "deployment/opentelemetry-operator",
+                "-n",
+                "opentelemetry-operator",
+                "--timeout=120s",
+            ],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        return True
+
+    except subprocess.CalledProcessError as e:
+        print("✗ OpenTelemetry Operator not ready")
+
+        if e.stderr:
+            print(e.stderr)
+
+        return False
+
+def wait_for_otel_webhook() -> bool:
+    try:
+        subprocess.run(
+            [
+                "kubectl",
+                "wait",
+                "--for=condition=Ready",
+                "pod",
+                "-l",
+                "app.kubernetes.io/name=opentelemetry-operator",
+                "-n",
+                "opentelemetry-operator",
+                "--timeout=120s",
+            ],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        return True
+    except subprocess.CalledProcessError:
+        return False
+
+def deploy_opentelemetry_collector() -> bool:
+    """
+    Deploy OpenTelemetry Collector in the Kind cluster for telemetry data collection.
+    
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    print(f"\nDeploying OpenTelemetry Collector in Kind cluster '{KIND_CLUSTER_NAME}'...")
+    if not kind_module.set_kubectl_context_for_kind_cluster(KIND_CLUSTER_NAME):
+        print(f"✗ Failed to set kubectl context for Kind cluster '{KIND_CLUSTER_NAME}'")
+        return False
+
+    try:
+        subprocess.run(
+            ["kubectl", "create", "namespace", "opentelemetry-collector"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    except subprocess.CalledProcessError as e:
+        # Ignore error if namespace already exists
+        stderr = e.stderr.decode() if hasattr(e.stderr, 'decode') else str(e.stderr)
+        if "AlreadyExists" in stderr:
+            print("Namespace 'opentelemetry-collector' already exists. Continuing...")
+        else:
+            print(f"✗ Failed to create namespace for OpenTelemetry Collector: {e}")
+            return False
+
+    wait_for_otel_operator()
+
+    # Retry waiting for webhook to be ready (up to 10 times, 5s interval)
+    import time
+    max_retries = 10
+    for attempt in range(max_retries):
+        if wait_for_otel_webhook():
+            break
+        print(f"Waiting for OpenTelemetry Operator webhook to be ready... (attempt {attempt+1}/{max_retries})")
+        time.sleep(5)
+    else:
+        print("✗ OpenTelemetry Operator webhook is not ready after waiting.")
+        return False
+
+    try:
+        subprocess.run(
+            ["kubectl", "apply", "-f", str(project_root / "k8s" / "opentelemetry-collector" / "OpenTelemetryCollector.yaml")],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    except subprocess.CalledProcessError as e:
+        print("✗ Failed to deploy OpenTelemetry Collector")
+        print("Command:", e.cmd)
+        print("Exit code:", e.returncode)
+
+        if e.stdout:
+            print("\n--- STDOUT ---")
+            print(e.stdout)
+
+        if e.stderr:
+            print("\n--- STDERR ---")
+            print(e.stderr)
+
+        return False
+
+    print(f"✓ Successfully deployed OpenTelemetry Collector in Kind cluster '{KIND_CLUSTER_NAME}'")
+    return True
+
 # Define all available steps
 ALL_STEPS = [
     Step(
@@ -1049,9 +1166,43 @@ ALL_STEPS = [
         step_kind=StepKind.Required(),
         perform_flag="deploy_loki_only",
         depends_on=['initialize_kind_cluster', 'add_grafana_chart_repo']
+    ),
+    Step(
+        name="add_opentelemetry_chart_repo",
+        description="Adds the OpenTelemetry Helm chart repository",
+        perform=lambda **kwargs: helm_module.add_opentelemetry_helm_repo(),
+        rollback=None,
+        step_kind=StepKind.Required(),
+        depends_on=['initialize_kind_cluster']
+    ),
+    Step(
+        name="deploy_cert_manager",
+        description="Deploys Cert-Manager in the Kind cluster",
+        perform=lambda **kwargs: helm_module.deploy_cert_manager_via_helm(),
+        perform_flag="deploy_cert_manager_only",
+        rollback=None,
+        step_kind=StepKind.Required(),
+        depends_on=['initialize_kind_cluster'],
+    ),
+    Step(
+        name="deploy_opentelemetry_operator",
+        description="Deploys OpenTelemetry Operator in the Kind cluster",
+        perform=lambda **kwargs: helm_module.deploy_opentelemetry_operator_via_helm(),
+        rollback=None,
+        step_kind=StepKind.Required(),
+        perform_flag="deploy_opentelemetry_operator_only",
+        depends_on=['initialize_kind_cluster', 'add_opentelemetry_chart_repo']
+    ),
+    Step(
+        name="deploy_opentelemetry_collector",
+        description="Deploys OpenTelemetry Collector in the Kind cluster",
+        perform=lambda **kwargs: deploy_opentelemetry_collector(),
+        rollback=None,
+        step_kind=StepKind.Required(),
+        perform_flag="deploy_opentelemetry_collector_only",
+        depends_on=['deploy_opentelemetry_operator']
     )
 ]
-
 
 def main():
     description = 'Bootstrap a local Docker registry and Kind cluster for Main-Line development.'
@@ -1076,6 +1227,12 @@ def main():
         '--no-rollback',
         action='store_true',
         help='Global argument. Disable automatic rollback on failure'
+    )
+    parser.add_argument(
+        '--until-step',
+        type=str,
+        default=None,
+        help="Run all steps up to and including the named step (e.g. --until-step=deploy_opentelemetry_collector)"
     )
     
     # Track which CLI args have been added and which steps use them
@@ -1257,6 +1414,14 @@ def main():
             steps_to_run.append(step)
     
     # Execute all steps
+    # If --until-step is set, run only up to and including that step
+    if getattr(args, 'until_step', None):
+        until_index = next((i for i, step in enumerate(steps_to_run) if step.name == args.until_step), None)
+        if until_index is not None:
+            steps_to_run = steps_to_run[:until_index + 1]
+        else:
+            print(f"Step '{args.until_step}' not found.")
+            return 1
     context = StepContext(steps_to_run, auto_rollback=not args.no_rollback)
     success = context.execute_all()
     

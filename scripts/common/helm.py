@@ -222,3 +222,115 @@ def deploy_loki_via_helm(namespace: str = "loki") -> bool:
     except Exception as e:
         print(f"✗ Failed to deploy Loki: {e}")
         return False
+
+def add_opentelemetry_helm_repo() -> bool:
+    """
+    Adds the OpenTelemetry Helm repository.
+    
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    print("\nAdding OpenTelemetry Helm repository...")
+    
+    # Check if helm is installed
+    if not is_helm_installed():
+        print("✗ 'helm' is not installed or not in PATH")
+        return False
+    
+    try:
+        result = subprocess.run(
+            ["helm", "repo", "add", "open-telemetry", "https://open-telemetry.github.io/opentelemetry-helm-charts"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding='utf-8'
+        )
+        
+        if result.returncode == 0:
+            print("✓ Successfully added OpenTelemetry Helm repository")
+            return True
+        else:
+            print("✗ Failed to add OpenTelemetry Helm repository")
+            print(result.stderr)
+            return False
+    except Exception as e:
+        print(f"✗ Failed to add Helm repository: {e}")
+        return False
+
+def deploy_cert_manager_via_helm(namespace: str = "cert-manager") -> bool:
+    """
+    Deploys Cert-Manager using Helm.
+    
+    Args:
+        namespace: Kubernetes namespace to deploy Cert-Manager into
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    print(f"\nDeploying Cert-Manager in namespace '{namespace}' via Helm...")
+    
+    # Check if helm is installed
+    if not is_helm_installed():
+        print("✗ 'helm' is not installed or not in PATH")
+        return False
+    
+    try:
+        result = subprocess.run(
+            [
+                "helm", "upgrade", "--install", "cert-manager", "oci://quay.io/jetstack/charts/cert-manager",
+                "--version", "v1.19.2",
+                "--namespace", namespace,
+                "--create-namespace",
+                "--set", "crds.enabled=true"
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding='utf-8'
+        )
+        
+        if result.returncode == 0:
+            print("✓ Successfully deployed Cert-Manager via Helm")
+            return True
+        else:
+            print("✗ Failed to deploy Cert-Manager via Helm")
+            print(result.stderr)
+            return False
+    except Exception as e:
+        print(f"✗ Failed to deploy Cert-Manager: {e}")
+        return False
+
+def deploy_opentelemetry_operator_via_helm(namespace: str = "opentelemetry-operator") -> bool:
+    """
+    Deploys OpenTelemetry Operator using Helm.
+
+    Args:
+        namespace: Kubernetes namespace to deploy OpenTelemetry Operator into
+    Returns:
+        bool: True if successful, False otherwise
+    """
+
+    print(f"\nDeploying OpenTelemetry Operator in namespace '{namespace}' via Helm...")
+    
+    try:
+        result = subprocess.run(
+            [
+                "helm", "upgrade", "--install", "opentelemetry-operator", "open-telemetry/opentelemetry-operator",
+                "--namespace", namespace,
+                "--create-namespace"
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding='utf-8'
+        )
+        
+        if result.returncode == 0:
+            print("✓ Successfully deployed OpenTelemetry Operator via Helm")
+            return True
+        else:
+            print("✗ Failed to deploy OpenTelemetry Operator via Helm")
+            print(result.stderr)
+            return False
+    except Exception as e:
+        print(f"✗ Failed to deploy OpenTelemetry Operator: {e}")
+        return False
