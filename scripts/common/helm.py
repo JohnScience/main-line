@@ -334,3 +334,41 @@ def deploy_opentelemetry_operator_via_helm(namespace: str = "opentelemetry-opera
     except Exception as e:
         print(f"✗ Failed to deploy OpenTelemetry Operator: {e}")
         return False
+
+def deploy_alloy_via_helm(namespace: str = "grafana-alloy") -> bool:
+    """
+    Deploys Grafana Alloy using Helm.
+
+    Args:
+        namespace: Kubernetes namespace to deploy Grafana Alloy into
+    Returns:
+        bool: True if successful, False otherwise
+    """
+
+    print(f"\nDeploying Grafana Alloy in namespace '{namespace}' via Helm...")
+    
+    git_root = git.get_git_root()
+
+    try:
+        result = subprocess.run(
+            [
+                "helm", "upgrade", "--install", "grafana", "grafana/alloy",
+                "--namespace", namespace,
+                "-f", Path(git_root) / "k8s" / "grafana-alloy" / "values.yaml"
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding='utf-8'
+        )
+        
+        if result.returncode == 0:
+            print("✓ Successfully deployed Grafana Alloy via Helm")
+            return True
+        else:
+            print("✗ Failed to deploy Grafana Alloy via Helm")
+            print(result.stderr)
+            return False
+    except Exception as e:
+        print(f"✗ Failed to deploy Grafana Alloy: {e}")
+        return False

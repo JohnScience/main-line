@@ -966,29 +966,77 @@ def deploy_opentelemetry_collector() -> bool:
         print("✗ OpenTelemetry Operator webhook is not ready after waiting.")
         return False
 
-    try:
-        subprocess.run(
-            ["kubectl", "apply", "-f", str(project_root / "k8s" / "opentelemetry-collector" / "OpenTelemetryCollector.yaml")],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-    except subprocess.CalledProcessError as e:
-        print("✗ Failed to deploy OpenTelemetry Collector")
-        print("Command:", e.cmd)
-        print("Exit code:", e.returncode)
 
-        if e.stdout:
-            print("\n--- STDOUT ---")
-            print(e.stdout)
-
-        if e.stderr:
-            print("\n--- STDERR ---")
-            print(e.stderr)
-
+    # Retry logic for webhook race condition
+    import time
+    max_apply_retries = 5
+    for apply_attempt in range(max_apply_retries):
+        try:
+            subprocess.run(
+                ["kubectl", "apply", "-f", str(project_root / "k8s" / "opentelemetry-collector" / "OpenTelemetryCollector.yaml")],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            break  # Success
+        except subprocess.CalledProcessError as e:
+            stderr = e.stderr.decode() if hasattr(e.stderr, 'decode') else str(e.stderr)
+            # Check for webhook connection refused error
+            if "failed calling webhook" in stderr and "connect: connection refused" in stderr:
+                print(f"Webhook not ready (connection refused). Retrying in 5 seconds... (attempt {apply_attempt+1}/{max_apply_retries})")
+                time.sleep(5)
+                continue
+            print("✗ Failed to deploy OpenTelemetry Collector")
+            print("Command:", e.cmd)
+            print("Exit code:", e.returncode)
+            if e.stdout:
+                print("\n--- STDOUT ---")
+                print(e.stdout)
+            if e.stderr:
+                print("\n--- STDERR ---")
+                print(e.stderr)
+            return False
+    else:
+        print("✗ Failed to deploy OpenTelemetry Collector after multiple retries due to webhook connection issues.")
         return False
 
     print(f"✓ Successfully deployed OpenTelemetry Collector in Kind cluster '{KIND_CLUSTER_NAME}'")
+    return True
+
+def deploy_alloy_config(namespace="grafana-alloy") -> bool:
+    print(f"Creating namespace '{namespace}' for Grafana Alloy...")
+    try:
+        subprocess.run(
+            ["kubectl", "create", "namespace", namespace],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        print(f"✓ Namespace '{namespace}' created.")
+    except subprocess.CalledProcessError as e:
+        stderr = e.stderr.decode() if hasattr(e.stderr, 'decode') else str(e.stderr)
+        if "AlreadyExists" in stderr:
+            print(f"ℹ Namespace '{namespace}' already exists. Continuing...")
+        else:
+            print(f"✗ Failed to create namespace '{namespace}': {stderr}")
+            return False
+
+    print(f"Creating ConfigMap 'alloy-config' in namespace '{namespace}'...")
+    try:
+        subprocess.run(
+            ["kubectl", "create", "configmap", "--namespace", namespace, "alloy-config", f"--from-file=config.alloy={project_root / 'k8s' / 'grafana-alloy' / 'config.alloy'}"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        print(f"✓ ConfigMap 'alloy-config' created in namespace '{namespace}'.")
+    except subprocess.CalledProcessError as e:
+        stderr = e.stderr.decode() if hasattr(e.stderr, 'decode') else str(e.stderr)
+        if "AlreadyExists" in stderr:
+            print(f"ℹ ConfigMap 'alloy-config' already exists in namespace '{namespace}'. Continuing...")
+        else:
+            print(f"✗ Failed to create ConfigMap 'alloy-config': {stderr}")
+            return False
     return True
 
 # Define all available steps
@@ -1166,6 +1214,24 @@ ALL_STEPS = [
         step_kind=StepKind.Required(),
         perform_flag="deploy_loki_only",
         depends_on=['initialize_kind_cluster', 'add_grafana_chart_repo']
+    ),
+    Step(
+        name="deploy_alloy_config",
+        description="Deploys a ConfigMap for Grafana Alloy in Kind cluster",
+        perform=lambda **kwargs: deploy_alloy_config(),
+        rollback=None,
+        step_kind=StepKind.Required(),
+        perform_flag="deploy_alloy_config_only",
+        depends_on=['initialize_kind_cluster', 'add_grafana_chart_repo']
+    ),
+    Step(
+        name="deploy_alloy",
+        description="Deploys Grafana Alloy in the Kind cluster",
+        perform=lambda **kwargs: helm_module.deploy_alloy_via_helm(),
+        rollback=None,
+        step_kind=StepKind.Required(),
+        perform_flag="deploy_alloy_only",
+        depends_on=['deploy_alloy_config']
     ),
     Step(
         name="add_opentelemetry_chart_repo",

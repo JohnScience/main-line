@@ -1,0 +1,33 @@
+logging {
+    format = "logfmt"
+    level = "info"
+
+    write_to = [loki.write.final.receiver]
+}
+
+loki.write "final" {
+    endpoint {
+        url = "http://loki-gateway.loki.svc.cluster.local/loki/api/v1/push"
+    }
+}
+
+otelcol.receiver.otlp "default" {
+    http {}
+    grpc {}
+
+    output {
+        logs    = [otelcol.processor.batch.default.input]
+    }
+}
+
+otelcol.processor.batch "default" {
+    output {
+        logs = [otelcol.exporter.otlphttp.default.input]
+    }
+}
+
+otelcol.exporter.otlphttp "default" {
+  client {
+    endpoint = "http://loki-gateway.loki.svc.cluster.local/otlp"
+  }
+}
