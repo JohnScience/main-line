@@ -1,0 +1,4 @@
+apiVersion: v2
+name: grafana-dashboard-httproute
+version: 0.1.0
+description: HTTPRoute for Grafana Dashboard

@@ -17,7 +17,10 @@ def main():
         return
     
     ip_address = expose_kind_cluster_network(KIND_CLUSTER_NAME)
-    print(f"✓ Exposed network IP address: {ip_address}")
+    if isinstance(ip_address, Exception):
+        print(f"✓ Exposed network IP address: Could not get exposed IP from 'kindccm' container")
+    else:
+        print(f"✓ Exposed network IP address: {ip_address}")
 
 if __name__ == "__main__":
     main()

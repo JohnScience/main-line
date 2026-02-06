@@ -372,3 +372,52 @@ def deploy_alloy_via_helm(namespace: str = "grafana-alloy") -> bool:
     except Exception as e:
         print(f"✗ Failed to deploy Grafana Alloy: {e}")
         return False
+
+def deploy_grafana_dashboard_via_helm(
+    namespace: str,
+    logical_chart_name: str = "main-line-grafana-dashboard",
+) -> bool:
+    """
+    Deploys a Grafana dashboard using the Grafana Helm chart and a custom values.yaml manifest.
+
+    Args:
+        namespace: The Kubernetes namespace to deploy the dashboard into.
+        logical_chart_name: The Helm release name for the dashboard deployment (default: 'main-line-grafana-dashboard').
+
+    Returns:
+        bool: True if deployment was successful, False otherwise.
+    """
+
+    git_root = git.get_git_root()
+
+    if not git_root:
+        print("✗ Could not determine Git root directory.")
+        return False
+
+    manifest = Path(git_root) / "k8s" / "grafana-dashboard" / "values.yaml"
+
+    # helm upgrade --install <logical-chart-name> grafana/grafana --namespace <namespace> -f <manifest>
+
+    try:
+        result = subprocess.run(
+            [
+                "helm", "upgrade", "--install", logical_chart_name, "grafana/grafana",
+                "--namespace", namespace,
+                "-f", str(manifest)
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding='utf-8'
+        )
+        
+        if result.returncode == 0:
+            print(f"✓ Successfully deployed Grafana Dashboard via Helm in namespace '{namespace}'")
+            return True
+        else:
+            print(f"✗ Failed to deploy Grafana Dashboard via Helm in namespace '{namespace}'")
+            print(result.stderr)
+            return False
+    except Exception as e:
+        print(f"✗ Failed to deploy Grafana Dashboard: {e}")
+        return False

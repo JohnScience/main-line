@@ -1,0 +1,7 @@
+gateway:
+  name: main-line-gateway
+  namespace: default
+hostnames:
+  domain:
+    - grafana-dashboard.main-line.local
+  gatewayIP: ""

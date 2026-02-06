@@ -38,38 +38,39 @@ def await_kindccm_container_id(
     while time.monotonic() < deadline:
         try:
             result = subprocess.run(
-                ["docker", "ps", "-q", "-f", "name=kindccm"],
+                ["docker", "ps", "--format", "{{.Names}}", "-f", "name=kindccm"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
                 encoding="utf-8",
             )
-
-            container_id = result.stdout.strip()
-            if container_id:
-                return container_id
-
+            container_name = result.stdout.strip().split('\n')
+            # Return the most recently started container (last in list)
+            if container_name and container_name[0]:
+                return container_name[-1]
         except Exception:
             pass
-
         time.sleep(poll_interval)
-
     return None
     
 def get_exposed_ip_from_kindccm(container_id: str) -> IPv4Address | IPv6Address | None:
     """Get the exposed IP address from the 'kindccm' Docker container."""
     
     try:
-        # docker inspect -f "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}" <container-id>
         result = subprocess.run(
-            ["docker", "inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", container_id],
+            ["docker", "inspect", container_id],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
             encoding='utf-8'
         )
-        ip_str = result.stdout.strip()
-        return ip_address(ip_str) if ip_str else None
+        import json
+        data = json.loads(result.stdout)[0]
+        networks = data["NetworkSettings"]["Networks"]
+        kind_net = networks.get("kind")
+        if kind_net and kind_net.get("IPAddress"):
+            return ip_address(kind_net["IPAddress"])
+        return None
     except Exception:
         return None
 

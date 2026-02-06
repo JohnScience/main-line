@@ -18,3 +18,9 @@ spec:
       allowedRoutes:
         namespaces:
           from: All
+    - name: grafana-direct
+      protocol: HTTP
+      port: 8003
+      allowedRoutes:
+        namespaces:
+          from: All

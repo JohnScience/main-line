@@ -41,6 +41,9 @@ nodes:
       - containerPort: 8002 # Kubernetes Dashboard direct access
         hostPort: 8002
         protocol: TCP
+      - containerPort: 8003 # Grafana direct access
+        hostPort: 8003
+        protocol: TCP
   - role: worker
     image: kindest/node:v1.34.0
   - role: worker

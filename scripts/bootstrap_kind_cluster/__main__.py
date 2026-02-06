@@ -7,6 +7,7 @@ for bootstrapping a Kind cluster with a local Docker registry.
 """
 
 import subprocess
+from scripts.common.kubectl import create_namespace
 import argparse
 import sys
 import yaml
@@ -1005,26 +1006,18 @@ def deploy_opentelemetry_collector() -> bool:
 
 def deploy_alloy_config(namespace="grafana-alloy") -> bool:
     print(f"Creating namespace '{namespace}' for Grafana Alloy...")
-    try:
-        subprocess.run(
-            ["kubectl", "create", "namespace", namespace],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
-        print(f"✓ Namespace '{namespace}' created.")
-    except subprocess.CalledProcessError as e:
-        stderr = e.stderr.decode() if hasattr(e.stderr, 'decode') else str(e.stderr)
-        if "AlreadyExists" in stderr:
-            print(f"ℹ Namespace '{namespace}' already exists. Continuing...")
-        else:
-            print(f"✗ Failed to create namespace '{namespace}': {stderr}")
-            return False
+    if not create_namespace(namespace):
+        print(f"✗ Failed to create namespace '{namespace}' (or kubectl not installed).")
+        return False
+    print(f"✓ Namespace '{namespace}' created or already exists.")
 
     print(f"Creating ConfigMap 'alloy-config' in namespace '{namespace}'...")
     try:
         subprocess.run(
-            ["kubectl", "create", "configmap", "--namespace", namespace, "alloy-config", f"--from-file=config.alloy={project_root / 'k8s' / 'grafana-alloy' / 'config.alloy'}"],
+            [
+                "kubectl", "create", "configmap", "--namespace", namespace, "alloy-config",
+                f"--from-file=config.alloy={project_root / 'k8s' / 'grafana-alloy' / 'config.alloy'}"
+            ],
             check=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE
@@ -1038,6 +1031,105 @@ def deploy_alloy_config(namespace="grafana-alloy") -> bool:
             print(f"✗ Failed to create ConfigMap 'alloy-config': {stderr}")
             return False
     return True
+
+def deploy_grafana_dashboard(namespace="grafana-dashboard", secret_timeout=120) -> bool:
+    """
+    Deploys the Grafana Dashboard and waits for the admin secret up to secret_timeout seconds.
+    Prints diagnostics if the secret is not found in time.
+    Args:
+        namespace: Namespace to deploy Grafana Dashboard.
+        secret_timeout: Maximum seconds to wait for the admin secret (default 300).
+    Returns:
+        bool: True if successful, False otherwise.
+    """
+    print(f"Deploying Grafana Dashboard in namespace '{namespace}'...")
+    create_namespace(namespace)
+    logical_chart_name = "main-line-grafana-dashboard"
+    if not helm_module.deploy_grafana_dashboard_via_helm(namespace=namespace, logical_chart_name=logical_chart_name):
+        print(f"✗ Failed to deploy Grafana Dashboard via Helm in namespace '{namespace}'")
+        return False
+    print(f"✓ Successfully deployed Grafana Dashboard in namespace '{namespace}'")
+
+      # This should match the Helm release name
+    import base64
+    import time
+    admin_password = None
+    poll_interval = 5
+    waited = 0
+    # Increase default timeout to 300 seconds (5 minutes)
+    if secret_timeout < 300:
+        secret_timeout = 300
+    while waited < secret_timeout:
+        try:
+            result = subprocess.run(
+                [
+                    "kubectl", "get", "secret",
+                    "--namespace", namespace,
+                    logical_chart_name,
+                    "-o", "jsonpath={.data.admin-password}"
+                ],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            admin_password_b64 = result.stdout.strip()
+            if not admin_password_b64:
+                print(f"✗ Grafana admin password not found in secret. The secret may not be ready yet.")
+            else:
+                try:
+                    admin_password = base64.b64decode(admin_password_b64).decode("utf-8")
+                except Exception as decode_err:
+                    print(f"✗ Failed to decode Grafana admin password: {decode_err}")
+                    admin_password = None
+                break
+        except subprocess.CalledProcessError as e:
+            stderr = e.stderr.decode() if hasattr(e.stderr, 'decode') else str(e.stderr)
+            if "not found" in stderr or "Error from server" in stderr:
+                if waited + poll_interval < secret_timeout:
+                    print(f"Waiting for Grafana secret to be created... (waited {waited+poll_interval}/{secret_timeout} seconds)")
+                    time.sleep(poll_interval)
+                    waited += poll_interval
+                    continue
+                else:
+                    print(f"✗ Grafana secret not found after waiting {secret_timeout} seconds. It may not have been created.")
+                    # Diagnostics: print pod status and Helm release status
+                    print("\n--- Diagnostics: Grafana Pod Status ---")
+                    try:
+                        pod_status = subprocess.run([
+                            "kubectl", "get", "pods", "-n", namespace
+                        ], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                        print(pod_status.stdout)
+                    except Exception as pod_err:
+                        print(f"Failed to get pod status: {pod_err}")
+                    print("\n--- Diagnostics: Helm Release Status ---")
+                    try:
+                        helm_status = subprocess.run([
+                            "helm", "status", logical_chart_name, "-n", namespace
+                        ], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                        print(helm_status.stdout)
+                    except Exception as helm_err:
+                        print(f"Failed to get Helm release status: {helm_err}")
+            else:
+                print(f"✗ Failed to retrieve Grafana admin password: {stderr}")
+            admin_password = None
+            break
+        except Exception as e:
+            print(f"✗ Unexpected error retrieving Grafana admin password: {e}")
+            admin_password = None
+            break
+
+    # Add to StepContext outputs if available
+    from scripts.bootstrap_kind_cluster.steps import Output
+    if admin_password:
+        output = Output(
+            title="Grafana Admin Password",
+            body=admin_password
+        )
+        print(f"\nGrafana admin password: {admin_password}\n")
+        return True, [output]
+    else:
+        print("\nCould not retrieve Grafana admin password.\n")
+        return True, []
 
 # Define all available steps
 ALL_STEPS = [
@@ -1267,8 +1359,216 @@ ALL_STEPS = [
         step_kind=StepKind.Required(),
         perform_flag="deploy_opentelemetry_collector_only",
         depends_on=['deploy_opentelemetry_operator']
+    ),
+    Step(
+        name="deploy_grafana_dashboard",
+        description="Deploys a pre-configured Grafana dashboard for Main-Line telemetry",
+        perform=lambda **kwargs: deploy_grafana_dashboard(),
+        rollback=None,
+        step_kind=StepKind.Required(),
+        perform_flag="deploy_grafana_dashboard_only",
+        depends_on=['initialize_kind_cluster']
+    ),
+    Step(
+        name="create_grafana_dashboard_httproute",
+        description="Creates the HTTPRoute for the Grafana Dashboard",
+        perform=lambda **kwargs: create_grafana_dashboard_httproute(),
+        rollback=None,
+        step_kind=StepKind.Required(),
+        perform_flag="create_grafana_dashboard_httproute_only",
+        depends_on=['create_gateway', 'deploy_grafana_dashboard']
+    ),
+    Step(
+        name="deploy_grafana_dashboard_direct_httproute",
+        description="Deploys the direct HTTPRoute for Grafana Dashboard (grafana-dashboard-direct)",
+        perform=lambda **kwargs: deploy_grafana_dashboard_direct_httproute(),
+        rollback=None,
+        step_kind=StepKind.Required(),
+        perform_flag="deploy_grafana_dashboard_direct_httproute_only",
+        depends_on=['create_gateway', 'deploy_grafana_dashboard']
     )
 ]
+
+def deploy_grafana_dashboard_direct_httproute(
+    cluster_name: str = KIND_CLUSTER_NAME,
+    namespace: str = "grafana-dashboard"
+) -> tuple[bool, list[Output]]:
+    """
+    Deploys the direct HTTPRoute for Grafana Dashboard from k8s/grafana-dashboard/httproute-direct.yaml.
+    Returns:
+        tuple[bool, list[Output]]: Success status and list of outputs
+    """
+    print(f"\nDeploying Grafana Dashboard direct HTTPRoute (grafana-dashboard-direct)...")
+    try:
+        httproute_path = project_root / "k8s" / "grafana-dashboard" / "httproute-direct.yaml"
+        subprocess.run(
+            ["kubectl", "apply", "-f", str(httproute_path)],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        print(f"✓ Successfully deployed grafana-dashboard-direct HTTPRoute.")
+        outputs = [
+            Output(
+                title="Grafana Dashboard Direct HTTPRoute",
+                body="Applied grafana-dashboard-direct HTTPRoute."
+            )
+        ]
+        return True, outputs
+    except Exception as e:
+        print(f"✗ Failed to deploy grafana-dashboard-direct HTTPRoute: {e}")
+        return False, []
+
+def shutdown_grafana_dashboard(namespace="grafana-dashboard") -> bool:
+    """
+    Uninstalls (undeploys) the Grafana dashboard Helm release and deletes its namespace.
+    Args:
+        namespace: The namespace where the Grafana dashboard is deployed.
+    Returns:
+        bool: True if successful, False otherwise.
+    """
+    print(f"Shutting down Grafana Dashboard in namespace '{namespace}'...")
+    try:
+        subprocess.run([
+            "helm", "uninstall", "grafana-dashboard", "--namespace", namespace
+        ], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        print(f"✓ Uninstalled Grafana Dashboard Helm release in namespace '{namespace}'")
+    except subprocess.CalledProcessError as e:
+        stderr = e.stderr.decode() if hasattr(e.stderr, 'decode') else str(e.stderr)
+        if "not found" in stderr:
+            print(f"ℹ Helm release 'grafana-dashboard' not found in namespace '{namespace}'. Continuing...")
+        else:
+            print(f"✗ Failed to uninstall Grafana Dashboard: {stderr}")
+            return False
+    # Delete the namespace
+    try:
+        subprocess.run([
+            "kubectl", "delete", "namespace", namespace
+        ], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        print(f"✓ Deleted namespace '{namespace}'")
+    except subprocess.CalledProcessError as e:
+        stderr = e.stderr.decode() if hasattr(e.stderr, 'decode') else str(e.stderr)
+        if "not found" in stderr:
+            print(f"ℹ Namespace '{namespace}' not found. Nothing to delete.")
+        else:
+            print(f"✗ Failed to delete namespace '{namespace}': {stderr}")
+            return False
+    return True
+
+def create_grafana_dashboard_httproute(
+    cluster_name: str = KIND_CLUSTER_NAME,
+    namespace: str = "grafana-dashboard"
+) -> tuple[bool, list[Output]]:
+    """
+    Creates the HTTPRoute for the Grafana Dashboard via Helm.
+    Returns:
+        tuple[bool, list[Output]]: Success status and list of outputs
+    """
+    print(f"\nCreating Grafana Dashboard HTTPRoute...")
+    try:
+        # Read the grafana port from gateway.yaml (look for 'grafana-direct' listener)
+        gateway_yaml_path = project_root / "k8s" / "gateway.yaml"
+        grafana_port = None
+        try:
+            with open(gateway_yaml_path, 'r') as f:
+                gateway_config = yaml.safe_load(f)
+                listeners = gateway_config.get('spec', {}).get('listeners', [])
+                for listener in listeners:
+                    if listener.get('name') == 'grafana-direct':
+                        grafana_port = listener.get('port')
+                        break
+        except Exception as e:
+            print(f"✗ Failed to read port from gateway.yaml: {e}")
+            return False, []
+
+        if grafana_port is None:
+            print(f"✗ Failed to find 'grafana-direct' listener port in gateway.yaml")
+            return False, []
+
+        # Read the HTTPRoute chart path from values.yaml
+        httproute_values_path = project_root / "k8s" / "grafana-dashboard" / "httproute" / "values.yaml"
+        gateway_name = None
+        gateway_namespace = None
+        grafana_hostnames = []
+        try:
+            with open(httproute_values_path, 'r') as f:
+                httproute_config = yaml.safe_load(f)
+                gateway_name = httproute_config.get('gateway', {}).get('name')
+                gateway_namespace = httproute_config.get('gateway', {}).get('namespace')
+                grafana_hostnames = httproute_config.get('hostnames', {}).get('domain', [])
+        except Exception as e:
+            print(f"✗ Failed to read gateway configuration from httproute values.yaml: {e}")
+            return False, []
+
+        if not gateway_name or not gateway_namespace:
+            print(f"✗ Failed to find gateway name or namespace in httproute values.yaml")
+            return False, []
+
+        if not grafana_hostnames:
+            print(f"✗ Failed to find grafana hostnames in httproute values.yaml")
+            return False, []
+
+        # Use the first hostname as the primary dashboard URL
+        primary_hostname = grafana_hostnames[0]
+
+        # Get the Gateway LoadBalancer IP
+        result = subprocess.run(
+            ["kubectl", "get", "gateway", gateway_name, "-n", gateway_namespace,
+             "-o", "jsonpath={.status.addresses[0].value}"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding='utf-8'
+        )
+        gateway_ip = result.stdout.strip()
+
+        if not gateway_ip:
+            print("⚠ Warning: Gateway LoadBalancer IP not yet assigned, deploying without IP hostname")
+            gateway_ip_arg = []
+        else:
+            gateway_ip_arg = ["--set", f"hostnames.gatewayIP={gateway_ip}"]
+
+        # Deploy HTTPRoute via Helm
+        httproute_chart_path = project_root / "k8s" / "grafana-dashboard" / "httproute"
+
+        helm_command = [
+            "helm", "upgrade", "--install",
+            "grafana-dashboard-httproute", str(httproute_chart_path),
+            "--namespace", namespace,
+            "--create-namespace"
+        ] + gateway_ip_arg
+
+        subprocess.run(
+            helm_command,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+
+        # Optionally, deploy a direct access HTTPRoute for localhost:<port> (if desired)
+        # (Not implemented here, but can be added as needed)
+
+        if gateway_ip:
+            print(f"✓ Successfully created Grafana Dashboard HTTPRoute (accessible via {primary_hostname}, {gateway_ip}, and localhost:{grafana_port})")
+            outputs = [
+                Output(
+                    title="Grafana Dashboard URL",
+                    body=f"http://{primary_hostname} (Gateway IP: {gateway_ip}), http://localhost:{grafana_port}"
+                )
+            ]
+        else:
+            print(f"✓ Successfully created Grafana Dashboard HTTPRoute (accessible via {primary_hostname} and localhost:{grafana_port})")
+            outputs = [
+                Output(
+                    title="Grafana Dashboard URL",
+                    body=f"http://{primary_hostname}, http://localhost:{grafana_port}"
+                )
+            ]
+        return True, outputs
+    except Exception as e:
+        print(f"✗ Failed to create Grafana Dashboard HTTPRoute: {e}")
+        return False, []
 
 def main():
     description = 'Bootstrap a local Docker registry and Kind cluster for Main-Line development.'
