@@ -589,7 +589,7 @@ def deploy_kubernetes_dashboard(cluster_name: str = KIND_CLUSTER_NAME) -> bool:
     return True
 
 
-def create_kubernetes_dashboard_admin(cluster_name: str = KIND_CLUSTER_NAME) -> bool:
+def create_kubernetes_dashboard_admin(cluster_name: str = KIND_CLUSTER_NAME) -> tuple[bool, list[Output]]:
     """
     Creates the service account and cluster role binding for the Kubernetes Dashboard admin user.
     
@@ -597,13 +597,13 @@ def create_kubernetes_dashboard_admin(cluster_name: str = KIND_CLUSTER_NAME) -> 
         cluster_name: Name of the Kind cluster
     
     Returns:
-        bool: True if successful, False otherwise
+        tuple[bool, list[Output]]: Success status and list of outputs
     """
     print(f"\nCreating Kubernetes Dashboard admin user...")
 
     if not kind_module.set_kubectl_context_for_kind_cluster(cluster_name):
         print(f"✗ Failed to set kubectl context for Kind cluster '{cluster_name}'")
-        return False
+        return False, []
     
     try:
         subprocess.run(
@@ -615,7 +615,7 @@ def create_kubernetes_dashboard_admin(cluster_name: str = KIND_CLUSTER_NAME) -> 
         print(f"✓ Successfully created Kubernetes Dashboard admin user service account")
     except Exception as e:
         print(f"✗ Failed to create Kubernetes Dashboard admin user service account: {e}")
-        return False
+        return False, []
     
     try:
         subprocess.run(
@@ -625,7 +625,32 @@ def create_kubernetes_dashboard_admin(cluster_name: str = KIND_CLUSTER_NAME) -> 
             stderr=subprocess.PIPE,
         )
         print(f"✓ Successfully created ClusterRoleBinding for admin user")
-        return True
+    except Exception as e:
+        print(f"✗ Failed to create ClusterRoleBinding for admin user: {e}")
+        return False, []
+
+    # Try to get the dashboard admin token
+    try:
+        result = subprocess.run(
+            [
+                "kubectl", "create", "token", "kubernetes-dashboard-admin", "-n", "kubernetes-dashboard"
+            ],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding='utf-8'
+        )
+        token = result.stdout.strip()
+        outputs = [Output(title="Kubernetes Dashboard Admin Token (`kubectl create token kubernetes-dashboard-admin -n kubernetes-dashboard`)", body=token)] if token else []
+        if token:
+            print(f"✓ Retrieved Kubernetes Dashboard admin token")
+        else:
+            print(f"⚠ No token returned by kubectl create token")
+        return True, outputs
+    except Exception as e:
+        print(f"✗ Failed to get Kubernetes Dashboard admin token: {e}")
+        return True, []
     except Exception as e:
         print(f"✗ Failed to create ClusterRoleBinding for admin user: {e}")
         return False
@@ -1155,7 +1180,7 @@ ALL_STEPS = [
     ),
     Step(
         name="build_and_push_images",
-        description="Builds and pushes all Docker images to the private registry so that they can be accessed by the 'kind'-powered cluster",
+        description="Builds and pushes all Docker images to the private registry so that later they can be accessed by the 'kind'-powered cluster",
         perform=lambda **kwargs: build_and_push_all_images(**kwargs),
         rollback=lambda registry_host='localhost', registry_port=5000, **kwargs: cleanup_images(registry_host, registry_port),
         args={
@@ -1267,7 +1292,7 @@ ALL_STEPS = [
         rollback=None,
         args={'cluster_name': KIND_CLUSTER_NAME},
         perform_flag='deploy_dashboard_only',
-        step_kind=StepKind.Optional(enable_flag='deploy_dashboard'),
+        step_kind=StepKind.Required(),
         depends_on=['initialize_kind_cluster']
     ),
     Step(
@@ -1277,7 +1302,7 @@ ALL_STEPS = [
         rollback=None,
         args={'cluster_name': KIND_CLUSTER_NAME},
         perform_flag='create_dashboard_admin_only',
-        step_kind=StepKind.Optional(enable_flag='deploy_dashboard'),
+        step_kind=StepKind.Required(),
         depends_on=['deploy_kubernetes_dashboard']
     ),
     Step(
@@ -1287,7 +1312,7 @@ ALL_STEPS = [
         rollback=None,
         args={'cluster_name': KIND_CLUSTER_NAME},
         perform_flag="create_kubernetes_dashboard_httproute_only",
-        step_kind=StepKind.Optional(enable_flag='deploy_dashboard'),
+        step_kind=StepKind.Required(),
         depends_on=['create_gateway', 'create_kubernetes_dashboard_admin']
     ),
     Step(
@@ -1570,17 +1595,26 @@ def create_grafana_dashboard_httproute(
         print(f"✗ Failed to create Grafana Dashboard HTTPRoute: {e}")
         return False, []
 
-def main():
+def make_description():
     description = 'Bootstrap a local Docker registry and Kind cluster for Main-Line development.'
     description += '\n\nAvailable Steps:'
 
     for step in ALL_STEPS:
         description += f'\n  - \'{step.name}\': {step.description}'
+    
+    return description
 
+def main():
     """Main entry point for the script."""
     parser = argparse.ArgumentParser(
-        description=description,
+        description=make_description(),
         formatter_class=argparse.RawTextHelpFormatter
+    )
+    parser.add_argument(
+        '--skip_steps',
+        type=str,
+        default=None,
+        help='Comma-separated list of step names to skip (e.g. -skip_steps=build_and_push_images,deploy_kubernetes_dashboard)'
     )
     
     # Add global arguments
@@ -1652,44 +1686,14 @@ def main():
                 help=help_text
             )
     
-    # Track flags for skip/enable/perform/rollback (to avoid duplicates)
-    added_flags = set(added_args.keys())
-    
-    # Add step-specific control flags
-    for step in ALL_STEPS:
-        # Add skip_flag and enable_flag from step_kind
-        if isinstance(step.step_kind, StepKind.Optional):
-            if step.step_kind.skip_flag:
-                flag_name = f'--{step.step_kind.skip_flag.replace("_", "-")}'
-                if flag_name not in added_flags:
-                    added_flags.add(flag_name)
-                    parser.add_argument(
-                        flag_name,
-                        action='store_true',
-                        help=f'Step-specific argument. Skip step \'{step.name}\''
-                    )
-            if step.step_kind.enable_flag:
-                flag_name = f'--{step.step_kind.enable_flag.replace("_", "-")}'
-                if flag_name not in added_flags:
-                    added_flags.add(flag_name)
-                    parser.add_argument(
-                        flag_name,
-                        action='store_true',
-                        help=f'Step-specific argument. Enable step \'{step.name}\''
-                    )
-        
-        # Add perform_flag and rollback_flag
-        if step.perform_flag:
-            flag_name = f'--{step.perform_flag.replace("_", "-")}'
-            if flag_name not in added_flags:
-                added_flags.add(flag_name)
-                parser.add_argument(flag_name, action='store_true', help=f'Step-specific argument. Only run step \'{step.name}\'')
-        
-        if step.rollback_flag:
-            flag_name = f'--{step.rollback_flag.replace("_", "-")}'
-            if flag_name not in added_flags:
-                added_flags.add(flag_name)
-                parser.add_argument(flag_name, action='store_true', help=f'Step-specific argument. Rollback step \'{step.name}\'')
+
+    # Add new --steps argument for comma-separated step names
+    parser.add_argument(
+        '--steps',
+        type=str,
+        default=None,
+        help='Comma-separated list of step names to run (e.g. --steps=step1,step2)'
+    )
     
     args = parser.parse_args()
     
@@ -1720,66 +1724,42 @@ def main():
         
         steps.append(step)
     
-    # Check if any step should be cleaned up individually
-    for step in steps:
-        if step.should_rollback(args):
-            print(f"=== Cleaning Up: {step.description} ===")
-            success = step.undo(force=True)  # Force rollback even if not completed
-            return 0 if success else 1
+
+    # Remove old -<step>-only and rollback logic, replaced by --steps
     
-    # Check if any step should run exclusively
-    for step in steps:
-        if step.should_perform_only(args):
-            print(f"=== Running Only: {step.description} ===")
-            context = StepContext([step], auto_rollback=not args.no_rollback)
-            if context.execute_all():
-                print(f"\n✓ Step '{step.name}' complete!")
-                
-                # Print outputs if any
-                if context.all_outputs:
-                    print("\n" + "=" * 60)
-                    print("Step Complete - Important Information:")
-                    print("=" * 60)
-                    for output in context.all_outputs:
-                        print(f"\n{output.title}:")
-                        print(f"  {output.body}")
-                    print("\n" + "=" * 60)
-                
-                return 0
-            else:
-                print(f"\n✗ Step '{step.name}' failed")
-                return 1
-    
+
     print("=== Docker Registry and Kind Cluster Setup ===")
-    
-    # Filter steps based on their kind and flags
+
+    # If --steps is provided, use only those steps (in the order given)
     steps_to_run = []
-    
-    for step in steps:
-        should_include = False
-        
-        if isinstance(step.step_kind, StepKind.Required):
-            # Required steps always run (unless skipped via their perform_flag)
-            should_include = True
-        elif isinstance(step.step_kind, StepKind.Optional):
-            # Optional steps run based on their enable/skip flags
-            skip_flag = step.step_kind.skip_flag
-            enable_flag = step.step_kind.enable_flag
-            
-            # Default to include if no flags are set
-            should_include = True
-            
-            # Check if explicitly skipped
-            if skip_flag and getattr(args, skip_flag, False):
-                should_include = False
-            # Check if enable flag is required but not set
-            elif enable_flag and not getattr(args, enable_flag, False):
-                should_include = False
-        
-        if should_include:
-            steps_to_run.append(step)
-    
-    # Execute all steps
+    skip_steps = []
+    if getattr(args, 'skip_steps', None):
+        skip_steps = [s.strip() for s in args.skip_steps.split(',') if s.strip()]
+    if getattr(args, 'steps', None):
+        requested = [s.strip() for s in args.steps.split(',') if s.strip()]
+        name_to_step = {step.name: step for step in steps}
+        missing = [s for s in requested if s not in name_to_step]
+        if missing:
+            print(f"Unknown step(s) in --steps: {', '.join(missing)}")
+            return 1
+        steps_to_run = [name_to_step[s] for s in requested if s not in skip_steps]
+    else:
+        # Default: run all required and enabled optional steps
+        for step in steps:
+            should_include = False
+            if isinstance(step.step_kind, StepKind.Required):
+                should_include = True
+            elif isinstance(step.step_kind, StepKind.Optional):
+                skip_flag = step.step_kind.skip_flag
+                enable_flag = step.step_kind.enable_flag
+                should_include = True
+                if skip_flag and getattr(args, skip_flag, False):
+                    should_include = False
+                elif enable_flag and not getattr(args, enable_flag, False):
+                    should_include = False
+            if should_include and step.name not in skip_steps:
+                steps_to_run.append(step)
+
     # If --until-step is set, run only up to and including that step
     if getattr(args, 'until_step', None):
         until_index = next((i for i, step in enumerate(steps_to_run) if step.name == args.until_step), None)
@@ -1788,13 +1768,14 @@ def main():
         else:
             print(f"Step '{args.until_step}' not found.")
             return 1
+
     context = StepContext(steps_to_run, auto_rollback=not args.no_rollback)
     success = context.execute_all()
-    
+
     if not success:
         print("\n✗ Setup failed")
         return 1
-    
+
     # Print all collected outputs
     if context.all_outputs:
         print("\n" + "=" * 60)
@@ -1804,7 +1785,7 @@ def main():
             print(f"\n{output.title}:")
             print(f"  {output.body}")
         print("\n" + "=" * 60)
-    
+
     return 0
 
 

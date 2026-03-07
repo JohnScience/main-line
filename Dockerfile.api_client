@@ -54,5 +54,11 @@ RUN if [ "$COMPILED" = "true" ]; then bun run build; fi
 
 FROM scratch AS api_client
 WORKDIR /api_client
-COPY --from=api-client-build /usr/src/api_client .
+COPY --from=api-client-build /usr/src/api_client/README.md .
+COPY --from=api-client-build /usr/src/api_client/build .
+COPY --from=api-client-build /usr/src/api_client/node_modules .
+COPY --from=api-client-build /usr/src/api_client/package-lock.json .
+COPY --from=api-client-build /usr/src/api_client/package.json .
+COPY --from=api-client-build /usr/src/api_client/src .
+COPY --from=api-client-build /usr/src/api_client/tsconfig.json .
 # COPY --from=api-client-build /usr/src/api_client/build.log .

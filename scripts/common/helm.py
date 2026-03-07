@@ -23,6 +23,7 @@ def is_helm_installed() -> bool:
     except FileNotFoundError:
         return False
 
+# https://groups.google.com/g/kubernetes-sig-ui/c/vpYIRDMysek/m/wd2iedUKDwAJ
 def add_kubernetes_dashboard_helm_repo() -> bool:
     """
     Adds the Kubernetes Dashboard Helm repository.
@@ -39,7 +40,7 @@ def add_kubernetes_dashboard_helm_repo() -> bool:
     
     try:
         result = subprocess.run(
-            ["helm", "repo", "add", "kubernetes-dashboard", "https://kubernetes.github.io/dashboard/"],
+            ["helm", "repo", "add", "headlamp", "https://kubernetes-sigs.github.io/headlamp/"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -78,11 +79,9 @@ def deploy_kubernetes_dashboard_via_helm(namespace: str = "kubernetes-dashboard"
     try:
         result = subprocess.run(
             [
-                "helm", "upgrade", "--install", "kubernetes-dashboard", "kubernetes-dashboard/kubernetes-dashboard",
+                "helm", "upgrade", "--install", "headlamp-kubernetes-dashboard", "headlamp/headlamp",
                 "--namespace", namespace,
-                "--create-namespace",
-                "--set", "kong.proxy.http.enabled=true",
-                "--set", "kong.proxy.tls.enabled=false"
+                "--create-namespace"
             ],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

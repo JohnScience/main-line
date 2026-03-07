@@ -36,21 +36,23 @@ spec:
             - k8s.node.name
     exporters:
       debug: {}
-      alloy:
-        endpoint: "grafana-alloy:12345" # Updated to match the ClusterIP service and port
-        tls:
-          insecure: true # Set to false and configure certs for production
-        # authentication, headers, or other options can be added here if needed
+      otlp:
+        endpoint: grafana-alloy:4317
+        protocols:
+          grpc: {}
+      tls:
+        insecure: true # Set to false and configure certs for production
+      # authentication, headers, or other options can be added here if needed
     service:
       pipelines:
         traces:
           receivers: [otlp]
           processors: [memory_limiter, batch]
-          exporters: [debug, alloy]
+          exporters: [debug, otlp]
         metrics:
           receivers: [otlp]
           processors: [memory_limiter, batch]
-          exporters: [debug, alloy]
+          exporters: [debug, otlp]
         logs:
           receivers: [otlp]
           processors: [memory_limiter, batch]

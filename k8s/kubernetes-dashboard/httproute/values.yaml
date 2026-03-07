@@ -5,7 +5,7 @@ gateway:
 
 # Dashboard service configuration
 dashboard:
-  serviceName: kubernetes-dashboard-kong-proxy
+  serviceName: headlamp-kubernetes-dashboard
   servicePort: 80
 
 # Hostname configuration
