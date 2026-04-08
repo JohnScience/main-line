@@ -100,6 +100,29 @@ def initialize_kind_cluster(
         return False
 
 
+def kind_cluster_exists(cluster_name: str) -> bool:
+    """
+    Check whether a Kind cluster with the given name exists.
+
+    Args:
+        cluster_name: Name of the Kind cluster
+
+    Returns:
+        bool: True if the cluster exists, False otherwise
+    """
+    try:
+        result = subprocess.run(
+            ["kind", "get", "clusters"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding='utf-8'
+        )
+        return cluster_name in result.stdout
+    except FileNotFoundError:
+        return False
+
+
 def cleanup_kind_cluster(cluster_name: str) -> bool:
     """
     Delete a Kind cluster.
@@ -150,21 +173,27 @@ def cleanup_kind_cluster(cluster_name: str) -> bool:
         print(f"✗ Failed to delete Kind cluster: {e}")
         return False
 
-def set_kubectl_context_for_kind_cluster(cluster_name: str) -> bool:
+def set_kubectl_context_for_kind_cluster(
+        cluster_name: str,
+        verbosity: int = 1
+) -> bool:
     """
     Sets the kubectl context to the specified Kind cluster.
     
     Args:
         cluster_name: Name of the Kind cluster
+        verbosity: Verbosity level for logging (default: 1)
     
     Returns:
         bool: True if successful, False otherwise
     """
-    print(f"\nSetting kubectl context to Kind cluster '{cluster_name}'...")
-    
+    if verbosity > 0:
+        print(f"\nSetting kubectl context to Kind cluster '{cluster_name}'...")
+
     # Check if kind is installed
     if not is_kind_installed():
-        print("✗ 'kind' is not installed or not in PATH")
+        if verbosity > 0:
+            print("✗ 'kind' is not installed or not in PATH")
         return False
     
     try:
@@ -178,13 +207,16 @@ def set_kubectl_context_for_kind_cluster(cluster_name: str) -> bool:
         )
         
         if result.returncode == 0:
-            print(f"✓ Successfully set kubectl context to '{context_name}'")
+            if verbosity > 0:
+                print(f"✓ Successfully set kubectl context to '{context_name}'")
             return True
         else:
-            print(f"✗ Failed to set kubectl context")
-            print(result.stderr)
+            if verbosity > 0:
+                print(f"✗ Failed to set kubectl context")
+                print(result.stderr)
             return False
     except Exception as e:
-        print(f"✗ Failed to set kubectl context: {e}")
+        if verbosity > 0:
+            print(f"✗ Failed to set kubectl context: {e}")
         return False
     

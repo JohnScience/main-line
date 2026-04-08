@@ -10,6 +10,8 @@ This module contains the core classes for defining and executing setup steps:
 from dataclasses import dataclass
 from typing import Callable
 
+from scripts.bootstrap_kind_cluster.check_result import CheckResult
+
 
 @dataclass
 class Output:
@@ -62,6 +64,7 @@ class Step:
     name: str
     description: str
     perform: Callable[..., bool | tuple[bool, list[Output]]]
+    check: Callable[..., CheckResult] | None = None  # Optional check to see if step is already satisfied
     rollback: Callable[..., bool] | None = None
     completed: bool = False
     args: dict = None

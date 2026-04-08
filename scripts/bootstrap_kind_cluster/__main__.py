@@ -6,326 +6,41 @@ This module contains the main execution logic and step implementations
 for bootstrapping a Kind cluster with a local Docker registry.
 """
 
-import subprocess
-from scripts.common.kubectl import create_namespace
 import argparse
 import sys
-import yaml
 from pathlib import Path
+
+from scripts.bootstrap_kind_cluster.args_handling import Cleanup, PerformChecks, PerformSteps, args_to_handling
+
+from scripts.bootstrap_kind_cluster.steps.add_grafana_chart_repo import ADD_GRAFANA_CHART_REPO
+from scripts.bootstrap_kind_cluster.steps.add_opentelemetry_chart_repo import ADD_OPENTELEMETRY_CHART_REPO
+from scripts.bootstrap_kind_cluster.steps.build_and_push_images import BUILD_AND_PUSH_IMAGES, cleanup_images
+from scripts.bootstrap_kind_cluster.steps.connect_to_kind import CONNECT_TO_KIND
+from scripts.bootstrap_kind_cluster.steps.create_gateway import CREATE_GATEWAY
+from scripts.bootstrap_kind_cluster.steps.create_gatewayclass import CREATE_GATEWAYCLASS
+from scripts.bootstrap_kind_cluster.steps.create_kubernetes_dashboard_admin import CREATE_KUBERNETES_DASHBOARD_ADMIN
+from scripts.bootstrap_kind_cluster.steps.create_kubernetes_dashboard_httproute import CREATE_KUBERNETES_DASHBOARD_HTTPROUTE
+from scripts.bootstrap_kind_cluster.steps.deploy_alloy import DEPLOY_ALLOY
+from scripts.bootstrap_kind_cluster.steps.deploy_alloy_config import DEPLOY_ALLOY_CONFIG
+from scripts.bootstrap_kind_cluster.steps.deploy_cert_manager import DEPLOY_CERT_MANAGER
+from scripts.bootstrap_kind_cluster.steps.deploy_gateway_api_implementation import DEPLOY_GATEWAY_API_IMPLEMENTATION
+from scripts.bootstrap_kind_cluster.steps.deploy_grafana_dashboard import DEPLOY_GRAFANA_DASHBOARD
+from scripts.bootstrap_kind_cluster.steps.deploy_grafana_dashboard_direct_httproute import DEPLOY_GRAFANA_DASHBOARD_DIRECT_HTTPROUTE
+from scripts.bootstrap_kind_cluster.steps.deploy_kubernetes_dashboard import DEPLOY_KUBERNETES_DASHBOARD
+from scripts.bootstrap_kind_cluster.steps.deploy_loki import DEPLOY_LOKI
+from scripts.bootstrap_kind_cluster.steps.deploy_opentelemetry_collector import DEPLOY_OPENTELEMETRY_COLLECTOR
+from scripts.bootstrap_kind_cluster.steps.deploy_opentelemetry_operator import DEPLOY_OPENTELEMETRY_OPERATOR
+from scripts.bootstrap_kind_cluster.steps.create_grafana_dashboard_httproute import CREATE_GRAFANA_DASHBOARD_HTTPROUTE
+from scripts.bootstrap_kind_cluster.steps.initialize_kind_cluster import INITIALIZE_KIND_CLUSTER
+from scripts.bootstrap_kind_cluster.steps.install_gateway_api_crds import INSTALL_GATEWAY_API_CRDS
+from scripts.bootstrap_kind_cluster.steps.install_metallb import INSTALL_METALLB
+from scripts.bootstrap_kind_cluster.steps.start_registry import START_REGISTRY, cleanup_registry
 
 # Add project root to path to support both direct execution and module import
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-import scripts.common.kind as kind_module
-import scripts.common.helm as helm_module
-
-from scripts.bootstrap_kind_cluster.steps import Step, StepKind, StepContext, CliArg, Output
-
-from scripts.common.docker import (
-    BuildOptions,
-    connect_container_to_network,
-    container_exists,
-    docker_image_exists,
-    get_registry_tagged_name,
-    is_container_connected_to_network,
-    is_container_running,
-    network_exists,
-    push_image,
-    remove_container,
-    remove_docker_image,
-    tag_image,
-)
-from scripts.common.docker_images import (
-    DOCKER_IMAGES,
-    build_all_images,
-    extract_artifact,
-    PurposeSpecificDataVariant,
-)
-from scripts.common.git import get_git_root
-from scripts.bootstrap_kind_cluster.steps import Step, StepKind, StepContext, CliArg
-from scripts.kind_cluster.index import KIND_CLUSTER_NAME
-
-def initialize_kind_cluster(cluster_name: str = KIND_CLUSTER_NAME) -> bool:
-    """
-    Initialize a Kind cluster using the project's configuration file.
-    
-    This wrapper function uses the config file at:
-    <git-root>/public-configs/kind/kind-config.yaml
-    
-    Args:
-        cluster_name: Name of the Kind cluster
-    
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    git_root = get_git_root()
-    if not git_root:
-        print("✗ Could not determine git root directory")
-        return False
-    
-    config_path = Path(git_root) / "public-configs" / "kind" / "kind-config.yaml"
-    return kind_module.initialize_kind_cluster(cluster_name, config_path)
-
-
-def cleanup_kind_cluster(cluster_name: str = KIND_CLUSTER_NAME) -> bool:
-    """
-    Delete a Kind cluster.
-    
-    Args:
-        cluster_name: Name of the Kind cluster
-    
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    return kind_module.cleanup_kind_cluster(cluster_name)
-
-
-def run_registry_container(port: int | None = None) -> tuple[bool, list[Output]]:
-    """
-    Run a Docker registry container with the specified port.
-    
-    If the container already exists, it will be removed and recreated.
-    
-    Args:
-        port: Port to expose the registry on. If None, will prompt user.
-    
-    Returns:
-        tuple[bool, list[Output]]: Success status and list of outputs
-    """
-    container_name = "main-line-registry"
-    image = "registry:2"
-    
-    # Prompt for port if not provided
-    if port is None:
-        while True:
-            port_input = input(f"Enter port for Docker registry (default: 5000): ").strip()
-            if not port_input:
-                port = 5000
-                break
-            try:
-                port = int(port_input)
-                if 1 <= port <= 65535:
-                    break
-                else:
-                    print("Port must be between 1 and 65535")
-            except ValueError:
-                print("Invalid port number. Please enter a valid integer.")
-    
-    print(f"\nSetting up Docker registry on port {port}...")
-    
-    # Remove existing container if it exists
-    if container_exists(container_name):
-        print(f"Removing existing container '{container_name}'...")
-        remove_container(container_name)
-    
-    try:
-        # Pull the registry image if it doesn't exist
-        if not docker_image_exists(image):
-            print(f"Pulling {image} image...")
-            subprocess.run(
-                ["docker", "pull", image],
-                check=True
-            )
-        else:
-            print(f"Image {image} already exists locally")
-        
-        # Run the registry container
-        print(f"Starting registry container '{container_name}'...")
-        subprocess.run(
-            [
-                "docker", "run", "-d",
-                "--name", container_name,
-                "-p", f"{port}:5000",
-                "--restart=always",
-                image
-            ],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
-        
-        # Verify the container is running
-        if is_container_running(container_name):
-            print(f"✓ Registry container started successfully on port {port}")
-            print(f"  Access it at: http://localhost:{port}")
-            outputs = [
-                Output(
-                    title="Registry Started",
-                    body=f"localhost:{port}"
-                )
-            ]
-            return True, outputs
-        else:
-            print(f"✗ Container was created but is not running")
-            return False, []
-            
-    except Exception as e:
-        print(f"✗ Failed to start registry container: {e}")
-        return False, []
-
-
-def build_and_push_all_images(registry_host: str, registry_port: int, force_rebuild: bool = False) -> bool:
-    """
-    Build all Docker images, tag them for the registry, and push them.
-    
-    Workflow:
-    1. Build all images in dependency order using docker_images.build_all_images()
-    2. Push each built image to the private registry
-    3. Extract artifacts from data-only images
-    
-    Args:
-        registry_host: Registry hostname (e.g., "localhost")
-        registry_port: Registry port number
-        force_rebuild: Whether to force rebuild existing images
-    
-    Returns:
-        bool: True if all operations successful, False otherwise
-    """
-    print("\n=== Building and Pushing All Images ===")
-    
-    registry = f"{registry_host}:{registry_port}"
-    
-    # Build all images with registry tagging
-    build_options: BuildOptions = {
-        "tabulation": "",
-        "force_rebuild": force_rebuild,
-        "private_registry": registry,
-    }
-    
-    try:
-        print(f"\nBuilding images (tagged for {registry})...")
-        built_images = build_all_images(build_options)
-        
-        if not built_images:
-            print("✗ No images were built")
-            return False
-        
-        # Tag and push all images to the registry
-        print(f"\nTagging and pushing {len(built_images)} images to registry...")
-        for image_name in built_images:
-            registry_image = get_registry_tagged_name(image_name, registry)
-            
-            try:
-                # Tag the image for the registry if not already tagged during build
-                if not docker_image_exists(registry_image):
-                    print(f"  Tagging {image_name} as {registry_image}...")
-                    tag_image(image_name, registry_image)
-                
-                # Push to registry
-                print(f"  Pushing {registry_image}...")
-                push_image(registry_image)
-                print(f"  ✓ Successfully pushed {registry_image}")
-            except Exception as e:
-                print(f"  ✗ Failed to push {registry_image}: {e}")
-                return False
-        
-        # Extract artifacts from data-only images
-        print("\nExtracting artifacts from data-only images...")
-        data_only_images = [
-            img for img in DOCKER_IMAGES 
-            if img["name"] is not None 
-            and isinstance(img["purpose_specific_data"], PurposeSpecificDataVariant.DataOnly)
-        ]
-        
-        if data_only_images:
-            for img in data_only_images:
-                try:
-                    extract_artifact(img, "  ")
-                except Exception as e:
-                    print(f"  ⚠ Warning: Failed to extract artifact from {img['name']}: {e}")
-                    # Don't fail the entire process for artifact extraction failures
-        else:
-            print("  No data-only images to extract artifacts from.")
-        
-        print(f"\n✓ Successfully built and pushed all {len(built_images)} images to {registry}")
-        return True
-        
-    except Exception as e:
-        print(f"\n✗ Failed to build and push images: {e}")
-        return False
-
-
-def cleanup_registry(container_name: str = "main-line-registry") -> bool:
-    """
-    Stop and remove the registry container.
-    
-    Args:
-        container_name: Name of the registry container
-    
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    print(f"\nCleaning up registry container '{container_name}'...")
-    
-    try:
-        if container_exists(container_name):
-            remove_container(container_name)
-            print(f"✓ Removed registry container '{container_name}'")
-            return True
-        else:
-            print(f"ℹ Registry container '{container_name}' does not exist")
-            return True
-    except Exception as e:
-        print(f"✗ Failed to remove registry container: {e}")
-        return False
-
-
-def cleanup_images(registry_host: str = "localhost", registry_port: int = 5000) -> bool:
-    """
-    Remove locally built images (both local and registry-tagged versions).
-    
-    Args:
-        registry_host: Registry hostname
-        registry_port: Registry port number
-    
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    print("\nCleaning up Docker images...")
-    
-    registry = f"{registry_host}:{registry_port}"
-    removed_count = 0
-    failed_count = 0
-    
-    for img in DOCKER_IMAGES:
-        if img["name"] is None:
-            continue
-        
-        local_name = img["name"]
-        registry_name = get_registry_tagged_name(local_name, registry)
-        
-        # Remove registry-tagged image
-        if docker_image_exists(registry_name):
-            try:
-                remove_docker_image(registry_name)
-                print(f"  ✓ Removed {registry_name}")
-                removed_count += 1
-            except Exception as e:
-                print(f"  ✗ Failed to remove {registry_name}: {e}")
-                failed_count += 1
-        
-        # Remove local image
-        if docker_image_exists(local_name):
-            try:
-                remove_docker_image(local_name)
-                print(f"  ✓ Removed {local_name}")
-                removed_count += 1
-            except Exception as e:
-                print(f"  ✗ Failed to remove {local_name}: {e}")
-                failed_count += 1
-    
-    if removed_count > 0:
-        print(f"\n✓ Removed {removed_count} images")
-    else:
-        print("\nℹ No images found to remove")
-    
-    if failed_count > 0:
-        print(f"⚠ Failed to remove {failed_count} images")
-        return False
-    
-    return True
-
+from scripts.bootstrap_kind_cluster.steps_base import Step, StepContext, CliArg, Output
 
 def cleanup_all(container_name: str = "main-line-registry", registry_host: str = "localhost", registry_port: int = 5000) -> bool:
     """
@@ -359,1241 +74,33 @@ def cleanup_all(container_name: str = "main-line-registry", registry_host: str =
     return success
 
 
-def connect_registry_to_kind_network(registry_name: str = "main-line-registry", cluster_name: str = "kind") -> bool:
-    """
-    Connect the registry container to the Kind cluster's Docker network.
-    
-    Kind creates a Docker bridge network named 'kind' (or with cluster name prefix).
-    By connecting the registry to this network, the Kind cluster can access it.
-    
-    Args:
-        registry_name: Name of the registry container
-        cluster_name: Name of the Kind cluster (used to determine network name)
-    
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    network_name = "kind"  # Default Kind network name
-    
-    print(f"\nConnecting registry to Kind network...")
-    
-    # Check if registry container exists and is running
-    if not container_exists(registry_name):
-        print(f"✗ Registry container '{registry_name}' does not exist")
-        return False
-    
-    if not is_container_running(registry_name):
-        print(f"✗ Registry container '{registry_name}' is not running")
-        return False
-    
-    # Check if Kind network exists
-    if not network_exists(network_name):
-        print(f"✗ Kind network '{network_name}' does not exist")
-        print(f"  Make sure a Kind cluster is running (kind create cluster)")
-        return False
-    
-    # Check if already connected
-    if is_container_connected_to_network(registry_name, network_name):
-        print(f"ℹ Registry is already connected to '{network_name}' network")
-        return True
-    
-    # Connect to network
-    try:
-        connect_container_to_network(registry_name, network_name)
-        print(f"✓ Successfully connected '{registry_name}' to '{network_name}' network")
-        print(f"  Kind cluster can now access registry at: {registry_name}:5000")
-        return True
-    except Exception as e:
-        print(f"✗ Failed to connect registry to Kind network: {e}")
-        return False
-
-
-def install_gateway_api_crds(cluster_name: str = KIND_CLUSTER_NAME) -> bool:
-    """
-    Install the Gateway API CRDs into the Kind cluster.
-    
-    Args:
-        cluster_name: Name of the Kind cluster
-    
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    print(f"\nInstalling Gateway API CRDs into Kind cluster '{cluster_name}'...")
-    if not kind_module.set_kubectl_context_for_kind_cluster(cluster_name):
-        print(f"✗ Failed to set kubectl context for Kind cluster '{cluster_name}'")
-        return False
-    
-    try:
-        subprocess.run(
-            ["kubectl", "apply", "-f", "https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.1/standard-install.yaml"],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        print(f"✓ Successfully installed Gateway API CRDs")
-        return True
-    except Exception as e:
-        print(f"✗ Failed to install Gateway API CRDs: {e}")
-        return False
-
-def deploy_envoy_gateway_in_kind_cluster(
-        cluster_name: str = KIND_CLUSTER_NAME,
-        namespace: str = "envoy-gateway-system"
-) -> bool:
-    """
-    Deploy Envoy Gateway as the Gateway API implementation in the Kind cluster.
-    
-    Args:
-        cluster_name: Name of the Kind cluster
-        namespace: Namespace to deploy Envoy Gateway
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    print(f"\nDeploying Envoy Gateway in Kind cluster '{cluster_name}'...")
-    if not kind_module.set_kubectl_context_for_kind_cluster(cluster_name):
-        print(f"✗ Failed to set kubectl context for Kind cluster '{cluster_name}'")
-        return False
-    
-    if not helm_module.deploy_envoy_gateway_via_helm(namespace=namespace):
-        print(f"✗ Failed to deploy Envoy Gateway via Helm in Kind cluster '{cluster_name}'")
-        return False
-    
-    print(f"✓ Successfully deployed Envoy Gateway in Kind cluster '{cluster_name}'")
-    return True
-
-def create_gatewayclass_in_kind_cluster(
-        cluster_name: str = KIND_CLUSTER_NAME,
-) -> bool:
-    """
-    Create a GatewayClass resource in the Kind cluster.
-    
-    Args:
-        cluster_name: Name of the Kind cluster
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    print(f"\nCreating GatewayClass in Kind cluster '{cluster_name}'...")
-    if not kind_module.set_kubectl_context_for_kind_cluster(cluster_name):
-        print(f"✗ Failed to set kubectl context for Kind cluster '{cluster_name}'")
-        return False
-    try:
-        subprocess.run(
-            ["kubectl", "apply", "-f", str(project_root / "k8s" / "gatewayclass.yaml")],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        print(f"✓ Successfully created GatewayClass")
-        return True
-    except Exception as e:
-        print(f"✗ Failed to create GatewayClass: {e}")
-        return False
-    
-
-def create_gateway_in_kind_cluster(
-        cluster_name: str = KIND_CLUSTER_NAME,
-        namespace: str = "envoy-gateway-system"
-) -> bool:
-    """
-    Create a Gateway resource in the Kind cluster.
-    
-    Args:
-        cluster_name: Name of the Kind cluster
-        namespace: Namespace to create the Gateway
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    print(f"\nCreating Gateway in Kind cluster '{cluster_name}'...")
-    if not kind_module.set_kubectl_context_for_kind_cluster(cluster_name):
-        print(f"✗ Failed to set kubectl context for Kind cluster '{cluster_name}'")
-        return False
-    # kubectl wait --timeout=5m -n envoy-gateway-system deployment/envoy-gateway --for=condition=Available
-    try:
-        subprocess.run(
-            ["kubectl", "wait", "--timeout=5m", "-n", namespace, "deployment/envoy-gateway", "--for=condition=Available"],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        print(f"✓ Gateway controller is available")
-    except Exception as e:
-        print(f"✗ Gateway controller is unavailable: {e}")
-        return False
-    try:
-        subprocess.run(
-            ["kubectl", "apply", "-f", str(project_root / "k8s" / "gateway.yaml")],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        print(f"✓ Successfully created Gateway")
-    except Exception as e:
-        print(f"✗ Failed to create Gateway: {e}")
-        return False
-    
-    # Wait for Gateway to create the Envoy proxy deployment
-    import time
-    print(f"Waiting for Envoy proxy deployment to be created...")
-    time.sleep(5)
-    
-    # Enable hostNetwork on the Envoy proxy deployment for Kind port mapping
-    try:
-        # Find the gateway deployment name
-        result = subprocess.run(
-            ["kubectl", "get", "deployment", "-n", namespace, "-l", "gateway.envoyproxy.io/owning-gateway-name=main-line-gateway", "-o", "name"],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        deployment_name = result.stdout.strip()
-        
-        if deployment_name:
-            print(f"Enabling hostNetwork on {deployment_name} for Kind port mapping...")
-            subprocess.run(
-                ["kubectl", "patch", deployment_name, "-n", namespace, "--type", "strategic", 
-                 "-p", '{"spec":{"template":{"spec":{"hostNetwork":true}}}}'],
-                check=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
-            print(f"✓ Successfully enabled hostNetwork on Envoy proxy deployment")
-        else:
-            print(f"⚠ Warning: Could not find Envoy proxy deployment")
-    except Exception as e:
-        print(f"⚠ Warning: Failed to enable hostNetwork on Envoy proxy: {e}")
-        print(f"  You may need to manually run: kubectl patch deployment -n {namespace} <deployment-name> --type strategic -p '{{\"spec\":{{\"template\":{{\"spec\":{{\"hostNetwork\":true}}}}}}}}'")
-    
-    return True
-
-
-def deploy_kubernetes_dashboard(cluster_name: str = KIND_CLUSTER_NAME) -> bool:
-    """
-    Deploy the Kubernetes Dashboard in the specified Kind cluster.
-    
-    Args:
-        cluster_name: Name of the Kind cluster
-    
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    print(f"\nDeploying Kubernetes Dashboard in Kind cluster '{cluster_name}'...")
-    if not kind_module.set_kubectl_context_for_kind_cluster(cluster_name):
-        print(f"✗ Failed to set kubectl context for Kind cluster '{cluster_name}'")
-        return False
-    
-    if not helm_module.deploy_kubernetes_dashboard_via_helm():
-        print(f"✗ Failed to deploy Kubernetes Dashboard via Helm in Kind cluster '{cluster_name}'")
-        return False
-    
-    print(f"✓ Successfully deployed Kubernetes Dashboard in Kind cluster '{cluster_name}'")
-    return True
-
-
-def create_kubernetes_dashboard_admin(cluster_name: str = KIND_CLUSTER_NAME) -> tuple[bool, list[Output]]:
-    """
-    Creates the service account and cluster role binding for the Kubernetes Dashboard admin user.
-    
-    Args:
-        cluster_name: Name of the Kind cluster
-    
-    Returns:
-        tuple[bool, list[Output]]: Success status and list of outputs
-    """
-    print(f"\nCreating Kubernetes Dashboard admin user...")
-
-    if not kind_module.set_kubectl_context_for_kind_cluster(cluster_name):
-        print(f"✗ Failed to set kubectl context for Kind cluster '{cluster_name}'")
-        return False, []
-    
-    try:
-        subprocess.run(
-            ["kubectl", "apply", "-f", str(project_root / "k8s" / "kubernetes-dashboard" / "kubernetes-dashboard-admin.yaml")],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        print(f"✓ Successfully created Kubernetes Dashboard admin user service account")
-    except Exception as e:
-        print(f"✗ Failed to create Kubernetes Dashboard admin user service account: {e}")
-        return False, []
-    
-    try:
-        subprocess.run(
-            ["kubectl", "apply", "-f", str(project_root / "k8s" / "base" / "cluster-admin-role-binding.yaml")],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        print(f"✓ Successfully created ClusterRoleBinding for admin user")
-    except Exception as e:
-        print(f"✗ Failed to create ClusterRoleBinding for admin user: {e}")
-        return False, []
-
-    # Try to get the dashboard admin token
-    try:
-        result = subprocess.run(
-            [
-                "kubectl", "create", "token", "kubernetes-dashboard-admin", "-n", "kubernetes-dashboard"
-            ],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            encoding='utf-8'
-        )
-        token = result.stdout.strip()
-        outputs = [Output(title="Kubernetes Dashboard Admin Token (`kubectl create token kubernetes-dashboard-admin -n kubernetes-dashboard`)", body=token)] if token else []
-        if token:
-            print(f"✓ Retrieved Kubernetes Dashboard admin token")
-        else:
-            print(f"⚠ No token returned by kubectl create token")
-        return True, outputs
-    except Exception as e:
-        print(f"✗ Failed to get Kubernetes Dashboard admin token: {e}")
-        return True, []
-    except Exception as e:
-        print(f"✗ Failed to create ClusterRoleBinding for admin user: {e}")
-        return False
-
-def create_kubernetes_dashboard_httproute(cluster_name: str = KIND_CLUSTER_NAME) -> tuple[bool, list[Output]]:
-    """
-    Creates the HTTPRoute for the Kubernetes Dashboard via Helm.
-    This allows dynamic configuration of hostnames including the Gateway IP.
-    
-    Args:
-        cluster_name: Name of the Kind cluster
-    Returns:
-        tuple[bool, list[Output]]: Success status and list of outputs
-    """
-    print(f"\nCreating Kubernetes Dashboard HTTPRoute...")
-
-    if not kind_module.set_kubectl_context_for_kind_cluster(cluster_name):
-        print(f"✗ Failed to set kubectl context for Kind cluster '{cluster_name}'")
-        return False, []
-    
-    try:
-        # Read the dashboard port from gateway.yaml
-        gateway_yaml_path = project_root / "k8s" / "gateway.yaml"
-        dashboard_port = None
-        try:
-            with open(gateway_yaml_path, 'r') as f:
-                gateway_config = yaml.safe_load(f)
-                listeners = gateway_config.get('spec', {}).get('listeners', [])
-                for listener in listeners:
-                    if listener.get('name') == 'dashboard-direct':
-                        dashboard_port = listener.get('port')
-                        break
-        except Exception as e:
-            print(f"✗ Failed to read port from gateway.yaml: {e}")
-            return False, []
-        
-        if dashboard_port is None:
-            print(f"✗ Failed to find 'dashboard-direct' listener port in gateway.yaml")
-            return False, []
-        
-        # Read the HTTPRoute chart path from values.yaml
-        httproute_values_path = project_root / "k8s" / "kubernetes-dashboard" / "httproute" / "values.yaml"
-        gateway_name = None
-        gateway_namespace = None
-        dashboard_hostnames = []
-        try:
-            with open(httproute_values_path, 'r') as f:
-                httproute_config = yaml.safe_load(f)
-                gateway_name = httproute_config.get('gateway', {}).get('name')
-                gateway_namespace = httproute_config.get('gateway', {}).get('namespace')
-                dashboard_hostnames = httproute_config.get('hostnames', {}).get('domain', [])
-        except Exception as e:
-            print(f"✗ Failed to read gateway configuration from httproute values.yaml: {e}")
-            return False, []
-        
-        if not gateway_name or not gateway_namespace:
-            print(f"✗ Failed to find gateway name or namespace in httproute values.yaml")
-            return False, []
-        
-        if not dashboard_hostnames:
-            print(f"✗ Failed to find dashboard hostnames in httproute values.yaml")
-            return False, []
-        
-        # Use the first hostname as the primary dashboard URL
-        primary_hostname = dashboard_hostnames[0]
-        
-        # Get the Gateway LoadBalancer IP
-        result = subprocess.run(
-            ["kubectl", "get", "gateway", gateway_name, "-n", gateway_namespace,
-             "-o", "jsonpath={.status.addresses[0].value}"],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            encoding='utf-8'
-        )
-        gateway_ip = result.stdout.strip()
-        
-        if not gateway_ip:
-            print("⚠ Warning: Gateway LoadBalancer IP not yet assigned, deploying without IP hostname")
-            gateway_ip_arg = []
-        else:
-            gateway_ip_arg = ["--set", f"hostnames.gatewayIP={gateway_ip}"]
-        
-        # Deploy HTTPRoute via Helm
-        httproute_chart_path = project_root / "k8s" / "kubernetes-dashboard" / "httproute"
-        
-        helm_command = [
-            "helm", "upgrade", "--install",
-            "kubernetes-dashboard-httproute", str(httproute_chart_path),
-            "--namespace", "kubernetes-dashboard",
-            "--create-namespace"
-        ] + gateway_ip_arg
-        
-        subprocess.run(
-            helm_command,
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
-        
-        # Deploy direct access HTTPRoute (for localhost:<port>)
-        try:
-            subprocess.run(
-                ["kubectl", "apply", "-f", str(project_root / "k8s" / "kubernetes-dashboard" / "httproute-direct.yaml")],
-                check=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
-        except Exception as e:
-            print(f"⚠ Warning: Failed to create direct access HTTPRoute: {e}")
-        
-        if gateway_ip:
-            print(f"✓ Successfully created Kubernetes Dashboard HTTPRoute (accessible via {primary_hostname}, {gateway_ip}, and localhost:{dashboard_port})")
-            outputs = [
-                Output(
-                    title="Dashboard URL",
-                    body=f"http://{primary_hostname} (Gateway IP: {gateway_ip}), http://localhost:{dashboard_port}"
-                )
-            ]
-        else:
-            print(f"✓ Successfully created Kubernetes Dashboard HTTPRoute (accessible via {primary_hostname} and localhost:{dashboard_port})")
-            outputs = [
-                Output(
-                    title="Dashboard URL",
-                    body=f"http://{primary_hostname}, http://localhost:{dashboard_port}"
-                )
-            ]
-        return True, outputs
-    except Exception as e:
-        print(f"✗ Failed to create Kubernetes Dashboard HTTPRoute: {e}")
-        return False, []
-
-
-def install_metallb(cluster_name: str = KIND_CLUSTER_NAME) -> bool:
-    """
-    Installs MetalLB to provide LoadBalancer support in Kind.
-    
-    MetalLB allows LoadBalancer services (like Gateway API) to get real IPs
-    that are accessible from the host, eliminating the need for port-forwarding hacks.
-    
-    Args:
-        cluster_name: Name of the Kind cluster
-    
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    print(f"\nInstalling MetalLB for LoadBalancer support...")
-    
-    if not kind_module.set_kubectl_context_for_kind_cluster(cluster_name):
-        print(f"✗ Failed to set kubectl context")
-        return False
-    
-    try:
-        subprocess.run(
-            ["helm", "repo", "add", "metallb", "https://metallb.github.io/metallb"],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
-    except Exception as e:
-        print(f"✗ Failed to add MetalLB Helm repository: {e}")
-        return False
-    
-    try:
-        subprocess.run(
-            ["helm", "upgrade", "--install", "metallb", "metallb/metallb",
-             "--namespace", "metallb-system",
-             "--create-namespace"],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
-    except Exception as e:
-        print(f"✗ Failed to install MetalLB via Helm: {e}")
-        return False
-
-    try:
-        print("  Waiting for MetalLB deployment to be created...")
-        import time
-        time.sleep(5)
-        
-        print("  Waiting for MetalLB controller deployment...")
-        subprocess.run(
-            ["kubectl", "wait", "--namespace", "metallb-system",
-             "--for=condition=available", "deployment/metallb-controller",
-             "--timeout=90s"],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
-        
-        # Configure MetalLB with Kind's network range
-        # Get Kind network subnet
-        result = subprocess.run(
-            ["docker", "network", "inspect", "kind", "-f", "{{(index .IPAM.Config 0).Subnet}}"],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            encoding='utf-8'
-        )
-        subnet = result.stdout.strip()
-        
-        # Use a small range from the subnet for LoadBalancer IPs
-        # e.g., if subnet is 172.19.0.0/16, use 172.19.255.200-172.19.255.250
-        import ipaddress
-        network = ipaddress.IPv4Network(subnet)
-        # Use the last /24 of the network for LoadBalancer IPs
-        lb_start = str(network.network_address + (255 << 8) + 200)
-        lb_end = str(network.network_address + (255 << 8) + 250)
-
-        repo_root_str = get_git_root()
-        if not repo_root_str:
-            print("✗ Could not determine git root directory")
-            return False
-        
-        # Deploy MetalLB configuration via Helm chart
-        metallb_chart_path = Path(repo_root_str) / "k8s" / "metallb"
-        
-        helm_command = [
-            "helm", "upgrade", "--install",
-            "metallb-config", str(metallb_chart_path),
-            "--namespace", "metallb-system",
-            "--set", f"ipAddressPool.addressRangeStart={lb_start}",
-            "--set", f"ipAddressPool.addressRangeEnd={lb_end}",
-            "--wait"
-        ]
-        
-        result = subprocess.run(
-            helm_command,
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            encoding='utf-8'
-        )
-        
-        if result.returncode != 0:
-            print(f"✗ Failed to configure MetalLB via Helm: {result.stderr}")
-            return False
-        
-        print(f"✓ Successfully installed MetalLB with IP range {lb_start}-{lb_end}")
-        return True
-        
-    except Exception as e:
-        print(f"✗ Failed to install MetalLB: {e}")
-        return False
-
-def wait_for_otel_operator() -> bool:
-    try:
-        subprocess.run(
-            [
-                "kubectl",
-                "wait",
-                "--for=condition=available",
-                "deployment/opentelemetry-operator",
-                "-n",
-                "opentelemetry-operator",
-                "--timeout=120s",
-            ],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-        return True
-
-    except subprocess.CalledProcessError as e:
-        print("✗ OpenTelemetry Operator not ready")
-
-        if e.stderr:
-            print(e.stderr)
-
-        return False
-
-def wait_for_otel_webhook() -> bool:
-    try:
-        subprocess.run(
-            [
-                "kubectl",
-                "wait",
-                "--for=condition=Ready",
-                "pod",
-                "-l",
-                "app.kubernetes.io/name=opentelemetry-operator",
-                "-n",
-                "opentelemetry-operator",
-                "--timeout=120s",
-            ],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-        return True
-    except subprocess.CalledProcessError:
-        return False
-
-def deploy_opentelemetry_collector() -> bool:
-    """
-    Deploy OpenTelemetry Collector in the Kind cluster for telemetry data collection.
-    
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    print(f"\nDeploying OpenTelemetry Collector in Kind cluster '{KIND_CLUSTER_NAME}'...")
-    if not kind_module.set_kubectl_context_for_kind_cluster(KIND_CLUSTER_NAME):
-        print(f"✗ Failed to set kubectl context for Kind cluster '{KIND_CLUSTER_NAME}'")
-        return False
-
-    try:
-        subprocess.run(
-            ["kubectl", "create", "namespace", "opentelemetry-collector"],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-    except subprocess.CalledProcessError as e:
-        # Ignore error if namespace already exists
-        stderr = e.stderr.decode() if hasattr(e.stderr, 'decode') else str(e.stderr)
-        if "AlreadyExists" in stderr:
-            print("Namespace 'opentelemetry-collector' already exists. Continuing...")
-        else:
-            print(f"✗ Failed to create namespace for OpenTelemetry Collector: {e}")
-            return False
-
-    wait_for_otel_operator()
-
-    # Retry waiting for webhook to be ready (up to 10 times, 5s interval)
-    import time
-    max_retries = 10
-    for attempt in range(max_retries):
-        if wait_for_otel_webhook():
-            break
-        print(f"Waiting for OpenTelemetry Operator webhook to be ready... (attempt {attempt+1}/{max_retries})")
-        time.sleep(5)
-    else:
-        print("✗ OpenTelemetry Operator webhook is not ready after waiting.")
-        return False
-
-
-    # Retry logic for webhook race condition
-    import time
-    max_apply_retries = 5
-    for apply_attempt in range(max_apply_retries):
-        try:
-            subprocess.run(
-                ["kubectl", "apply", "-f", str(project_root / "k8s" / "opentelemetry-collector" / "OpenTelemetryCollector.yaml")],
-                check=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
-            break  # Success
-        except subprocess.CalledProcessError as e:
-            stderr = e.stderr.decode() if hasattr(e.stderr, 'decode') else str(e.stderr)
-            # Check for webhook connection refused error
-            if "failed calling webhook" in stderr and "connect: connection refused" in stderr:
-                print(f"Webhook not ready (connection refused). Retrying in 5 seconds... (attempt {apply_attempt+1}/{max_apply_retries})")
-                time.sleep(5)
-                continue
-            print("✗ Failed to deploy OpenTelemetry Collector")
-            print("Command:", e.cmd)
-            print("Exit code:", e.returncode)
-            if e.stdout:
-                print("\n--- STDOUT ---")
-                print(e.stdout)
-            if e.stderr:
-                print("\n--- STDERR ---")
-                print(e.stderr)
-            return False
-    else:
-        print("✗ Failed to deploy OpenTelemetry Collector after multiple retries due to webhook connection issues.")
-        return False
-
-    print(f"✓ Successfully deployed OpenTelemetry Collector in Kind cluster '{KIND_CLUSTER_NAME}'")
-    return True
-
-def deploy_alloy_config(namespace="grafana-alloy") -> bool:
-    print(f"Creating namespace '{namespace}' for Grafana Alloy...")
-    if not create_namespace(namespace):
-        print(f"✗ Failed to create namespace '{namespace}' (or kubectl not installed).")
-        return False
-    print(f"✓ Namespace '{namespace}' created or already exists.")
-
-    print(f"Creating ConfigMap 'alloy-config' in namespace '{namespace}'...")
-    try:
-        subprocess.run(
-            [
-                "kubectl", "create", "configmap", "--namespace", namespace, "alloy-config",
-                f"--from-file=config.alloy={project_root / 'k8s' / 'grafana-alloy' / 'config.alloy'}"
-            ],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
-        print(f"✓ ConfigMap 'alloy-config' created in namespace '{namespace}'.")
-    except subprocess.CalledProcessError as e:
-        stderr = e.stderr.decode() if hasattr(e.stderr, 'decode') else str(e.stderr)
-        if "AlreadyExists" in stderr:
-            print(f"ℹ ConfigMap 'alloy-config' already exists in namespace '{namespace}'. Continuing...")
-        else:
-            print(f"✗ Failed to create ConfigMap 'alloy-config': {stderr}")
-            return False
-    return True
-
-def deploy_grafana_dashboard(namespace="grafana-dashboard", secret_timeout=120) -> bool:
-    """
-    Deploys the Grafana Dashboard and waits for the admin secret up to secret_timeout seconds.
-    Prints diagnostics if the secret is not found in time.
-    Args:
-        namespace: Namespace to deploy Grafana Dashboard.
-        secret_timeout: Maximum seconds to wait for the admin secret (default 300).
-    Returns:
-        bool: True if successful, False otherwise.
-    """
-    print(f"Deploying Grafana Dashboard in namespace '{namespace}'...")
-    create_namespace(namespace)
-    logical_chart_name = "main-line-grafana-dashboard"
-    if not helm_module.deploy_grafana_dashboard_via_helm(namespace=namespace, logical_chart_name=logical_chart_name):
-        print(f"✗ Failed to deploy Grafana Dashboard via Helm in namespace '{namespace}'")
-        return False
-    print(f"✓ Successfully deployed Grafana Dashboard in namespace '{namespace}'")
-
-      # This should match the Helm release name
-    import base64
-    import time
-    admin_password = None
-    poll_interval = 5
-    waited = 0
-    # Increase default timeout to 300 seconds (5 minutes)
-    if secret_timeout < 300:
-        secret_timeout = 300
-    while waited < secret_timeout:
-        try:
-            result = subprocess.run(
-                [
-                    "kubectl", "get", "secret",
-                    "--namespace", namespace,
-                    logical_chart_name,
-                    "-o", "jsonpath={.data.admin-password}"
-                ],
-                check=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
-            admin_password_b64 = result.stdout.strip()
-            if not admin_password_b64:
-                print(f"✗ Grafana admin password not found in secret. The secret may not be ready yet.")
-            else:
-                try:
-                    admin_password = base64.b64decode(admin_password_b64).decode("utf-8")
-                except Exception as decode_err:
-                    print(f"✗ Failed to decode Grafana admin password: {decode_err}")
-                    admin_password = None
-                break
-        except subprocess.CalledProcessError as e:
-            stderr = e.stderr.decode() if hasattr(e.stderr, 'decode') else str(e.stderr)
-            if "not found" in stderr or "Error from server" in stderr:
-                if waited + poll_interval < secret_timeout:
-                    print(f"Waiting for Grafana secret to be created... (waited {waited+poll_interval}/{secret_timeout} seconds)")
-                    time.sleep(poll_interval)
-                    waited += poll_interval
-                    continue
-                else:
-                    print(f"✗ Grafana secret not found after waiting {secret_timeout} seconds. It may not have been created.")
-                    # Diagnostics: print pod status and Helm release status
-                    print("\n--- Diagnostics: Grafana Pod Status ---")
-                    try:
-                        pod_status = subprocess.run([
-                            "kubectl", "get", "pods", "-n", namespace
-                        ], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                        print(pod_status.stdout)
-                    except Exception as pod_err:
-                        print(f"Failed to get pod status: {pod_err}")
-                    print("\n--- Diagnostics: Helm Release Status ---")
-                    try:
-                        helm_status = subprocess.run([
-                            "helm", "status", logical_chart_name, "-n", namespace
-                        ], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                        print(helm_status.stdout)
-                    except Exception as helm_err:
-                        print(f"Failed to get Helm release status: {helm_err}")
-            else:
-                print(f"✗ Failed to retrieve Grafana admin password: {stderr}")
-            admin_password = None
-            break
-        except Exception as e:
-            print(f"✗ Unexpected error retrieving Grafana admin password: {e}")
-            admin_password = None
-            break
-
-    # Add to StepContext outputs if available
-    from scripts.bootstrap_kind_cluster.steps import Output
-    if admin_password:
-        output = Output(
-            title="Grafana Admin Password",
-            body=admin_password
-        )
-        print(f"\nGrafana admin password: {admin_password}\n")
-        return True, [output]
-    else:
-        print("\nCould not retrieve Grafana admin password.\n")
-        return True, []
 
 # Define all available steps
 ALL_STEPS = [
-    Step(
-        name="start_registry",
-        description="Starts a private Docker registry for the main-line project",
-        perform=lambda **kwargs: run_registry_container(**kwargs),
-        rollback=lambda **kwargs: cleanup_registry(),
-        args={'port': 5000},
-        perform_flag='registry_only',
-        rollback_flag='cleanup_registry',
-        step_kind=StepKind.Required(),
-        cli_arg_mappings={'port': 'port'},
-        cli_args=[
-            CliArg(
-                name='port',
-                arg_type=int,
-                default=5000,
-                help='Registry port',
-                step_description='Port to expose the Docker registry on'
-            )
-        ]
-    ),
-    Step(
-        name="build_and_push_images",
-        description="Builds and pushes all Docker images to the private registry so that later they can be accessed by the 'kind'-powered cluster",
-        perform=lambda **kwargs: build_and_push_all_images(**kwargs),
-        rollback=lambda registry_host='localhost', registry_port=5000, **kwargs: cleanup_images(registry_host, registry_port),
-        args={
-            'registry_host': 'localhost',
-            'registry_port': 5000,
-            'force_rebuild': False
-        },
-        rollback_flag='cleanup_images',
-        step_kind=StepKind.Optional(skip_flag='skip_build'),
-        cli_arg_mappings={'registry_port': 'port', 'force_rebuild': 'force_rebuild'},
-        cli_args=[
-            CliArg(
-                name='port',
-                arg_type=int,
-                default=5000,
-                help='Registry port',
-                step_description='Registry port for pushing built images'
-            ),
-            CliArg(
-                name='force_rebuild',
-                arg_type=bool,
-                default=False,
-                help='Force rebuild Docker images',
-                step_description='Rebuild all images even if they already exist'
-            )
-        ],
-        depends_on=['start_registry']
-    ),
-    Step(
-        name="initialize_kind_cluster",
-        description="Uses 'kind' Kubernetes cluster provider to initialize a cluster with a config file",
-        perform=lambda **kwargs: initialize_kind_cluster(**kwargs),
-        rollback=lambda **kwargs: cleanup_kind_cluster(**kwargs),
-        args={'cluster_name': KIND_CLUSTER_NAME},
-        perform_flag='initialize_cluster_only',
-        rollback_flag='cleanup_cluster',
-        step_kind=StepKind.Required()
-    ),
-    Step(
-        name="connect_to_kind",
-        description="Connects the private Docker registry to the 'kind' network ('docker network connect kind main-line-registry')",
-        perform=lambda **kwargs: connect_registry_to_kind_network(**kwargs),
-        rollback=None,
-        args={'registry_name': 'main-line-registry', 'cluster_name': KIND_CLUSTER_NAME},
-        perform_flag='connect_to_kind_only',
-        step_kind=StepKind.Required(),
-        depends_on=['initialize_kind_cluster', 'start_registry'],
-    ),
-    Step(
-        name="install_gateway_api_crds",
-        description="Installs the Gateway API CRDs into the Kind cluster",
-        perform=lambda **kwargs: install_gateway_api_crds(**kwargs),
-        rollback=None,
-        args={'cluster_name': KIND_CLUSTER_NAME},
-        perform_flag='install_gateway_api_crds_only',
-        step_kind=StepKind.Required(),
-        depends_on=['initialize_kind_cluster'],
-    ),
-    Step(
-        name="install_metallb",
-        description="Installs MetalLB to provide LoadBalancer support in Kind on Linux via Bridge",
-        perform=lambda **kwargs: install_metallb(**kwargs),
-        rollback=None,
-        args={'cluster_name': KIND_CLUSTER_NAME},
-        perform_flag='install_metallb_only',
-        step_kind=StepKind.Required(),
-        depends_on=['initialize_kind_cluster'],
-    ),
-    Step(
-        name="deploy_gateway_api_implementation",
-        description="Deploys a Gateway API implementation (Envoy Gateway) into the Kind cluster",
-        perform=lambda **kwargs: deploy_envoy_gateway_in_kind_cluster(**kwargs),
-        rollback=None,
-        args={
-            'cluster_name': KIND_CLUSTER_NAME,
-            'namespace': 'envoy-gateway-system'
-        },
-        perform_flag='deploy_gateway_api_implementation_only',
-        step_kind=StepKind.Required(),
-        depends_on=['install_gateway_api_crds'],
-    ),
-    Step(
-        name="create_gatewayclass",
-        description="Creates a GatewayClass resource in the Kind cluster",
-        perform=lambda **kwargs: create_gatewayclass_in_kind_cluster(**kwargs),
-        rollback=None,
-        args={'cluster_name': KIND_CLUSTER_NAME},
-        perform_flag='create_gatewayclass_only',
-        step_kind=StepKind.Required(),
-        depends_on=['deploy_gateway_api_implementation']
-    ),
-    Step(
-        name="create_gateway",
-        description="Creates a Gateway resource in the Kind cluster",
-        perform=lambda **kwargs: create_gateway_in_kind_cluster(**kwargs),
-        rollback=None,
-        args={
-            'cluster_name': KIND_CLUSTER_NAME,
-            'namespace': 'envoy-gateway-system'
-        },
-        perform_flag='create_gateway_only',
-        step_kind=StepKind.Required(),
-        depends_on=['create_gatewayclass']
-    ),
-    Step(
-        name="deploy_kubernetes_dashboard",
-        description="Deploys the Kubernetes Dashboard in the Kind cluster",
-        perform=lambda **kwargs: deploy_kubernetes_dashboard(**kwargs),
-        rollback=None,
-        args={'cluster_name': KIND_CLUSTER_NAME},
-        perform_flag='deploy_dashboard_only',
-        step_kind=StepKind.Required(),
-        depends_on=['initialize_kind_cluster']
-    ),
-    Step(
-        name="create_kubernetes_dashboard_admin",
-        description="Creates the service account and cluster role binding for the Kubernetes Dashboard admin user",
-        perform=lambda **kwargs: create_kubernetes_dashboard_admin(**kwargs),
-        rollback=None,
-        args={'cluster_name': KIND_CLUSTER_NAME},
-        perform_flag='create_dashboard_admin_only',
-        step_kind=StepKind.Required(),
-        depends_on=['deploy_kubernetes_dashboard']
-    ),
-    Step(
-        name="create_kubernetes_dashboard_httproute",
-        description="Creates the HTTPRoute for the Kubernetes Dashboard",
-        perform=lambda **kwargs: create_kubernetes_dashboard_httproute(**kwargs),
-        rollback=None,
-        args={'cluster_name': KIND_CLUSTER_NAME},
-        perform_flag="create_kubernetes_dashboard_httproute_only",
-        step_kind=StepKind.Required(),
-        depends_on=['create_gateway', 'create_kubernetes_dashboard_admin']
-    ),
-    Step(
-        name="add_grafana_chart_repo",
-        description="Adds the Grafana Helm chart repository",
-        perform=lambda **kwargs: helm_module.add_grafana_helm_repo(),
-        rollback=None,
-        step_kind=StepKind.Required(),
-        depends_on=['initialize_kind_cluster']
-    ),
-    Step(
-        name="deploy_loki",
-        description="Deploys Loki for log aggregation in the Kind cluster",
-        perform=lambda **kwargs: helm_module.deploy_loki_via_helm(),
-        rollback=None,
-        step_kind=StepKind.Required(),
-        perform_flag="deploy_loki_only",
-        depends_on=['initialize_kind_cluster', 'add_grafana_chart_repo']
-    ),
-    Step(
-        name="deploy_alloy_config",
-        description="Deploys a ConfigMap for Grafana Alloy in Kind cluster",
-        perform=lambda **kwargs: deploy_alloy_config(),
-        rollback=None,
-        step_kind=StepKind.Required(),
-        perform_flag="deploy_alloy_config_only",
-        depends_on=['initialize_kind_cluster', 'add_grafana_chart_repo']
-    ),
-    Step(
-        name="deploy_alloy",
-        description="Deploys Grafana Alloy in the Kind cluster",
-        perform=lambda **kwargs: helm_module.deploy_alloy_via_helm(),
-        rollback=None,
-        step_kind=StepKind.Required(),
-        perform_flag="deploy_alloy_only",
-        depends_on=['deploy_alloy_config']
-    ),
-    Step(
-        name="add_opentelemetry_chart_repo",
-        description="Adds the OpenTelemetry Helm chart repository",
-        perform=lambda **kwargs: helm_module.add_opentelemetry_helm_repo(),
-        rollback=None,
-        step_kind=StepKind.Required(),
-        depends_on=['initialize_kind_cluster']
-    ),
-    Step(
-        name="deploy_cert_manager",
-        description="Deploys Cert-Manager in the Kind cluster",
-        perform=lambda **kwargs: helm_module.deploy_cert_manager_via_helm(),
-        perform_flag="deploy_cert_manager_only",
-        rollback=None,
-        step_kind=StepKind.Required(),
-        depends_on=['initialize_kind_cluster'],
-    ),
-    Step(
-        name="deploy_opentelemetry_operator",
-        description="Deploys OpenTelemetry Operator in the Kind cluster",
-        perform=lambda **kwargs: helm_module.deploy_opentelemetry_operator_via_helm(),
-        rollback=None,
-        step_kind=StepKind.Required(),
-        perform_flag="deploy_opentelemetry_operator_only",
-        depends_on=['initialize_kind_cluster', 'add_opentelemetry_chart_repo']
-    ),
-    Step(
-        name="deploy_opentelemetry_collector",
-        description="Deploys OpenTelemetry Collector in the Kind cluster",
-        perform=lambda **kwargs: deploy_opentelemetry_collector(),
-        rollback=None,
-        step_kind=StepKind.Required(),
-        perform_flag="deploy_opentelemetry_collector_only",
-        depends_on=['deploy_opentelemetry_operator']
-    ),
-    Step(
-        name="deploy_grafana_dashboard",
-        description="Deploys a pre-configured Grafana dashboard for Main-Line telemetry",
-        perform=lambda **kwargs: deploy_grafana_dashboard(),
-        rollback=None,
-        step_kind=StepKind.Required(),
-        perform_flag="deploy_grafana_dashboard_only",
-        depends_on=['initialize_kind_cluster']
-    ),
-    Step(
-        name="create_grafana_dashboard_httproute",
-        description="Creates the HTTPRoute for the Grafana Dashboard",
-        perform=lambda **kwargs: create_grafana_dashboard_httproute(),
-        rollback=None,
-        step_kind=StepKind.Required(),
-        perform_flag="create_grafana_dashboard_httproute_only",
-        depends_on=['create_gateway', 'deploy_grafana_dashboard']
-    ),
-    Step(
-        name="deploy_grafana_dashboard_direct_httproute",
-        description="Deploys the direct HTTPRoute for Grafana Dashboard (grafana-dashboard-direct)",
-        perform=lambda **kwargs: deploy_grafana_dashboard_direct_httproute(),
-        rollback=None,
-        step_kind=StepKind.Required(),
-        perform_flag="deploy_grafana_dashboard_direct_httproute_only",
-        depends_on=['create_gateway', 'deploy_grafana_dashboard']
-    )
+    START_REGISTRY,
+    BUILD_AND_PUSH_IMAGES,
+    INITIALIZE_KIND_CLUSTER,
+    CONNECT_TO_KIND,
+    INSTALL_GATEWAY_API_CRDS,
+    INSTALL_METALLB,
+    DEPLOY_GATEWAY_API_IMPLEMENTATION,
+    CREATE_GATEWAYCLASS,
+    CREATE_GATEWAY,
+    DEPLOY_KUBERNETES_DASHBOARD,
+    CREATE_KUBERNETES_DASHBOARD_ADMIN,
+    CREATE_KUBERNETES_DASHBOARD_HTTPROUTE,
+    ADD_GRAFANA_CHART_REPO,
+    DEPLOY_LOKI,
+    DEPLOY_ALLOY_CONFIG,
+    DEPLOY_ALLOY,
+    ADD_OPENTELEMETRY_CHART_REPO,
+    DEPLOY_CERT_MANAGER,
+    DEPLOY_OPENTELEMETRY_OPERATOR,
+    DEPLOY_OPENTELEMETRY_COLLECTOR,
+    DEPLOY_GRAFANA_DASHBOARD,
+    CREATE_GRAFANA_DASHBOARD_HTTPROUTE,
+    DEPLOY_GRAFANA_DASHBOARD_DIRECT_HTTPROUTE,
 ]
-
-def deploy_grafana_dashboard_direct_httproute(
-    cluster_name: str = KIND_CLUSTER_NAME,
-    namespace: str = "grafana-dashboard"
-) -> tuple[bool, list[Output]]:
-    """
-    Deploys the direct HTTPRoute for Grafana Dashboard from k8s/grafana-dashboard/httproute-direct.yaml.
-    Returns:
-        tuple[bool, list[Output]]: Success status and list of outputs
-    """
-    print(f"\nDeploying Grafana Dashboard direct HTTPRoute (grafana-dashboard-direct)...")
-    try:
-        httproute_path = project_root / "k8s" / "grafana-dashboard" / "httproute-direct.yaml"
-        subprocess.run(
-            ["kubectl", "apply", "-f", str(httproute_path)],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
-        print(f"✓ Successfully deployed grafana-dashboard-direct HTTPRoute.")
-        outputs = [
-            Output(
-                title="Grafana Dashboard Direct HTTPRoute",
-                body="Applied grafana-dashboard-direct HTTPRoute."
-            )
-        ]
-        return True, outputs
-    except Exception as e:
-        print(f"✗ Failed to deploy grafana-dashboard-direct HTTPRoute: {e}")
-        return False, []
-
-def shutdown_grafana_dashboard(namespace="grafana-dashboard") -> bool:
-    """
-    Uninstalls (undeploys) the Grafana dashboard Helm release and deletes its namespace.
-    Args:
-        namespace: The namespace where the Grafana dashboard is deployed.
-    Returns:
-        bool: True if successful, False otherwise.
-    """
-    print(f"Shutting down Grafana Dashboard in namespace '{namespace}'...")
-    try:
-        subprocess.run([
-            "helm", "uninstall", "grafana-dashboard", "--namespace", namespace
-        ], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        print(f"✓ Uninstalled Grafana Dashboard Helm release in namespace '{namespace}'")
-    except subprocess.CalledProcessError as e:
-        stderr = e.stderr.decode() if hasattr(e.stderr, 'decode') else str(e.stderr)
-        if "not found" in stderr:
-            print(f"ℹ Helm release 'grafana-dashboard' not found in namespace '{namespace}'. Continuing...")
-        else:
-            print(f"✗ Failed to uninstall Grafana Dashboard: {stderr}")
-            return False
-    # Delete the namespace
-    try:
-        subprocess.run([
-            "kubectl", "delete", "namespace", namespace
-        ], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        print(f"✓ Deleted namespace '{namespace}'")
-    except subprocess.CalledProcessError as e:
-        stderr = e.stderr.decode() if hasattr(e.stderr, 'decode') else str(e.stderr)
-        if "not found" in stderr:
-            print(f"ℹ Namespace '{namespace}' not found. Nothing to delete.")
-        else:
-            print(f"✗ Failed to delete namespace '{namespace}': {stderr}")
-            return False
-    return True
-
-def create_grafana_dashboard_httproute(
-    cluster_name: str = KIND_CLUSTER_NAME,
-    namespace: str = "grafana-dashboard"
-) -> tuple[bool, list[Output]]:
-    """
-    Creates the HTTPRoute for the Grafana Dashboard via Helm.
-    Returns:
-        tuple[bool, list[Output]]: Success status and list of outputs
-    """
-    print(f"\nCreating Grafana Dashboard HTTPRoute...")
-    try:
-        # Read the grafana port from gateway.yaml (look for 'grafana-direct' listener)
-        gateway_yaml_path = project_root / "k8s" / "gateway.yaml"
-        grafana_port = None
-        try:
-            with open(gateway_yaml_path, 'r') as f:
-                gateway_config = yaml.safe_load(f)
-                listeners = gateway_config.get('spec', {}).get('listeners', [])
-                for listener in listeners:
-                    if listener.get('name') == 'grafana-direct':
-                        grafana_port = listener.get('port')
-                        break
-        except Exception as e:
-            print(f"✗ Failed to read port from gateway.yaml: {e}")
-            return False, []
-
-        if grafana_port is None:
-            print(f"✗ Failed to find 'grafana-direct' listener port in gateway.yaml")
-            return False, []
-
-        # Read the HTTPRoute chart path from values.yaml
-        httproute_values_path = project_root / "k8s" / "grafana-dashboard" / "httproute" / "values.yaml"
-        gateway_name = None
-        gateway_namespace = None
-        grafana_hostnames = []
-        try:
-            with open(httproute_values_path, 'r') as f:
-                httproute_config = yaml.safe_load(f)
-                gateway_name = httproute_config.get('gateway', {}).get('name')
-                gateway_namespace = httproute_config.get('gateway', {}).get('namespace')
-                grafana_hostnames = httproute_config.get('hostnames', {}).get('domain', [])
-        except Exception as e:
-            print(f"✗ Failed to read gateway configuration from httproute values.yaml: {e}")
-            return False, []
-
-        if not gateway_name or not gateway_namespace:
-            print(f"✗ Failed to find gateway name or namespace in httproute values.yaml")
-            return False, []
-
-        if not grafana_hostnames:
-            print(f"✗ Failed to find grafana hostnames in httproute values.yaml")
-            return False, []
-
-        # Use the first hostname as the primary dashboard URL
-        primary_hostname = grafana_hostnames[0]
-
-        # Get the Gateway LoadBalancer IP
-        result = subprocess.run(
-            ["kubectl", "get", "gateway", gateway_name, "-n", gateway_namespace,
-             "-o", "jsonpath={.status.addresses[0].value}"],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            encoding='utf-8'
-        )
-        gateway_ip = result.stdout.strip()
-
-        if not gateway_ip:
-            print("⚠ Warning: Gateway LoadBalancer IP not yet assigned, deploying without IP hostname")
-            gateway_ip_arg = []
-        else:
-            gateway_ip_arg = ["--set", f"hostnames.gatewayIP={gateway_ip}"]
-
-        # Deploy HTTPRoute via Helm
-        httproute_chart_path = project_root / "k8s" / "grafana-dashboard" / "httproute"
-
-        helm_command = [
-            "helm", "upgrade", "--install",
-            "grafana-dashboard-httproute", str(httproute_chart_path),
-            "--namespace", namespace,
-            "--create-namespace"
-        ] + gateway_ip_arg
-
-        subprocess.run(
-            helm_command,
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
-
-        # Optionally, deploy a direct access HTTPRoute for localhost:<port> (if desired)
-        # (Not implemented here, but can be added as needed)
-
-        if gateway_ip:
-            print(f"✓ Successfully created Grafana Dashboard HTTPRoute (accessible via {primary_hostname}, {gateway_ip}, and localhost:{grafana_port})")
-            outputs = [
-                Output(
-                    title="Grafana Dashboard URL",
-                    body=f"http://{primary_hostname} (Gateway IP: {gateway_ip}), http://localhost:{grafana_port}"
-                )
-            ]
-        else:
-            print(f"✓ Successfully created Grafana Dashboard HTTPRoute (accessible via {primary_hostname} and localhost:{grafana_port})")
-            outputs = [
-                Output(
-                    title="Grafana Dashboard URL",
-                    body=f"http://{primary_hostname}, http://localhost:{grafana_port}"
-                )
-            ]
-        return True, outputs
-    except Exception as e:
-        print(f"✗ Failed to create Grafana Dashboard HTTPRoute: {e}")
-        return False, []
 
 def make_description():
     description = 'Bootstrap a local Docker registry and Kind cluster for Main-Line development.'
@@ -1604,12 +111,7 @@ def make_description():
     
     return description
 
-def main():
-    """Main entry point for the script."""
-    parser = argparse.ArgumentParser(
-        description=make_description(),
-        formatter_class=argparse.RawTextHelpFormatter
-    )
+def add_basic_parser_arguments(parser: argparse.ArgumentParser):
     parser.add_argument(
         '--skip_steps',
         type=str,
@@ -1634,13 +136,27 @@ def main():
         default=None,
         help="Run all steps up to and including the named step (e.g. --until-step=deploy_opentelemetry_collector)"
     )
+    parser.add_argument(
+        '--checks',
+        action='store_true',
+        help='Run checks instead of the main setup'
+    )
+
+def collect_added_args(steps: list[Step]) -> dict[str, list[dict[str, any]]]:
+    """Collect all CLI arguments from steps and which steps use them.
     
+    Args:
+        steps: List of Step objects to analyze
+    
+    Returns:
+        dict: Mapping of CLI flag name to list of usages (step and cli_arg info)
+    """
     # Track which CLI args have been added and which steps use them
     # Format: {'--port': [{'step': step_obj, 'cli_arg': cli_arg_obj}, ...]}
     added_args = {}
     
     # First pass: collect all argument usages across steps
-    for step in ALL_STEPS:
+    for step in steps:
         for cli_arg in step.cli_args:
             flag_name = cli_arg.get_flag_name()
             if flag_name not in added_args:
@@ -1649,7 +165,10 @@ def main():
                 'step': step,
                 'cli_arg': cli_arg
             })
-    
+
+    return added_args
+
+def add_step_specific_parser_arguments(parser: argparse.ArgumentParser, added_args: dict[str, list[dict[str, any]]]):
     # Second pass: add arguments to parser with multi-line help
     for flag_name, usages in added_args.items():
         # Get the first usage for type and default info
@@ -1685,8 +204,15 @@ def main():
                 default=cli_arg.default,
                 help=help_text
             )
-    
 
+def make_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description=make_description(),
+        formatter_class=argparse.RawTextHelpFormatter
+    )
+    add_basic_parser_arguments(parser)
+    added_args = collect_added_args(ALL_STEPS)    
+    add_step_specific_parser_arguments(parser, added_args)
     # Add new --steps argument for comma-separated step names
     parser.add_argument(
         '--steps',
@@ -1694,82 +220,45 @@ def main():
         default=None,
         help='Comma-separated list of step names to run (e.g. --steps=step1,step2)'
     )
-    
-    args = parser.parse_args()
-    
-    # Handle cleanup operations (check if any step wants to be cleaned up)
-    if args.cleanup:
-        return 0 if cleanup_all(registry_port=args.port) else 1
-    
-    # Create a copy of steps and update args from command line
-    steps: list[Step] = []
-    for step_template in ALL_STEPS:
-        step = Step(
-            name=step_template.name,
-            description=step_template.description,
-            perform=step_template.perform,
-            rollback=step_template.rollback,
-            args=step_template.args.copy(),
-            perform_flag=step_template.perform_flag,
-            rollback_flag=step_template.rollback_flag,
-            step_kind=step_template.step_kind,
-            cli_arg_mappings=step_template.cli_arg_mappings,
-            cli_args=step_template.cli_args
-        )
-        
-        # Apply CLI argument mappings declaratively
-        for step_arg_name, cli_arg_name in step.cli_arg_mappings.items():
-            if hasattr(args, cli_arg_name):
-                step.args[step_arg_name] = getattr(args, cli_arg_name)
-        
-        steps.append(step)
-    
+    return parser
 
-    # Remove old -<step>-only and rollback logic, replaced by --steps
-    
+def main():
+    """Main entry point for the script."""
+    parser = make_parser()
+    args = parser.parse_args()
+
+    try:
+        handling = args_to_handling(args, ALL_STEPS)
+    except ValueError as e:
+        print(str(e))
+        return 1
+
+    if isinstance(handling, Cleanup):
+        return 0 if cleanup_all(registry_port=handling.registry_port) else 1
+
+    if isinstance(handling, PerformChecks):
+        from scripts.bootstrap_kind_cluster.check_result import CheckPassed
+        print("=== Running Checks ===")
+        all_passed = True
+        for step in handling.steps:
+            if step.check is None:
+                print(f"  ? {step.name}")
+            else:
+                result = step.check(**step.args)
+                passed = isinstance(result, CheckPassed)
+                status = "✓" if passed else "✗"
+                print(f"  {status} {step.name}")
+                if not passed:
+                    for error in result.errors:
+                        print(f"      {error}")
+                    all_passed = False
+        return 0 if all_passed else 1
+
+    assert isinstance(handling, PerformSteps)
 
     print("=== Docker Registry and Kind Cluster Setup ===")
 
-    # If --steps is provided, use only those steps (in the order given)
-    steps_to_run = []
-    skip_steps = []
-    if getattr(args, 'skip_steps', None):
-        skip_steps = [s.strip() for s in args.skip_steps.split(',') if s.strip()]
-    if getattr(args, 'steps', None):
-        requested = [s.strip() for s in args.steps.split(',') if s.strip()]
-        name_to_step = {step.name: step for step in steps}
-        missing = [s for s in requested if s not in name_to_step]
-        if missing:
-            print(f"Unknown step(s) in --steps: {', '.join(missing)}")
-            return 1
-        steps_to_run = [name_to_step[s] for s in requested if s not in skip_steps]
-    else:
-        # Default: run all required and enabled optional steps
-        for step in steps:
-            should_include = False
-            if isinstance(step.step_kind, StepKind.Required):
-                should_include = True
-            elif isinstance(step.step_kind, StepKind.Optional):
-                skip_flag = step.step_kind.skip_flag
-                enable_flag = step.step_kind.enable_flag
-                should_include = True
-                if skip_flag and getattr(args, skip_flag, False):
-                    should_include = False
-                elif enable_flag and not getattr(args, enable_flag, False):
-                    should_include = False
-            if should_include and step.name not in skip_steps:
-                steps_to_run.append(step)
-
-    # If --until-step is set, run only up to and including that step
-    if getattr(args, 'until_step', None):
-        until_index = next((i for i, step in enumerate(steps_to_run) if step.name == args.until_step), None)
-        if until_index is not None:
-            steps_to_run = steps_to_run[:until_index + 1]
-        else:
-            print(f"Step '{args.until_step}' not found.")
-            return 1
-
-    context = StepContext(steps_to_run, auto_rollback=not args.no_rollback)
+    context = StepContext(handling.steps, auto_rollback=handling.auto_rollback)
     success = context.execute_all()
 
     if not success:
