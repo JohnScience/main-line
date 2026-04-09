@@ -8,6 +8,7 @@ logging {
 loki.write "final" {
     endpoint {
         url = "http://loki-gateway.loki.svc.cluster.local/loki/api/v1/push"
+        tenant_id = "fake"
     }
 }
 
@@ -29,5 +30,8 @@ otelcol.processor.batch "default" {
 otelcol.exporter.otlphttp "default" {
   client {
     endpoint = "http://loki-gateway.loki.svc.cluster.local/otlp"
+    headers = {
+      "X-Scope-OrgID" = "fake",
+    }
   }
 }

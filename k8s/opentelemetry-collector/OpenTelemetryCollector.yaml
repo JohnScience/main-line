@@ -37,7 +37,7 @@ spec:
     exporters:
       debug: {}
       otlp:
-        endpoint: grafana-alloy:4317
+        endpoint: grafana-alloy.grafana-alloy.svc.cluster.local:4317
         tls:
           insecure: true
     service:
