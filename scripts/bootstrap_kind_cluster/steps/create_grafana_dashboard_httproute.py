@@ -3,7 +3,9 @@ import yaml
 from pathlib import Path
 
 from scripts.bootstrap_kind_cluster.steps_base import Step, StepKind, Output
+from scripts.bootstrap_kind_cluster.check_result import CheckPassed, CheckFailed, CheckResult
 from scripts.kind_cluster.index import KIND_CLUSTER_NAME
+import scripts.common.kind as kind_module
 
 project_root = Path(__file__).parent.parent.parent.parent
 
@@ -120,10 +122,27 @@ def create_grafana_dashboard_httproute(
         return False, []
 
 
+def check_create_grafana_dashboard_httproute(cluster_name: str = KIND_CLUSTER_NAME, **kwargs) -> CheckResult:
+    if not kind_module.set_kubectl_context_for_kind_cluster(cluster_name, verbosity=0):
+        return CheckFailed(errors=[f"Failed to set kubectl context for Kind cluster '{cluster_name}'"])
+    try:
+        result = subprocess.run(
+            ["kubectl", "get", "httproute", "grafana-dashboard-httproute", "-n", "grafana-dashboard"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        if result.returncode == 0:
+            return CheckPassed()
+        return CheckFailed(errors=["HTTPRoute 'grafana-dashboard-httproute' not found in namespace 'grafana-dashboard'"])
+    except FileNotFoundError:
+        return CheckFailed(errors=["kubectl not found"])
+
+
 CREATE_GRAFANA_DASHBOARD_HTTPROUTE = Step(
     name="create_grafana_dashboard_httproute",
     description="Creates the HTTPRoute for the Grafana Dashboard",
     perform=lambda **kwargs: create_grafana_dashboard_httproute(),
+    check=lambda **kwargs: check_create_grafana_dashboard_httproute(**kwargs),
     rollback=None,
     step_kind=StepKind.Required(),
     perform_flag="create_grafana_dashboard_httproute_only",

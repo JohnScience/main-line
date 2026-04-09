@@ -3,8 +3,11 @@ import base64
 import time
 
 from scripts.bootstrap_kind_cluster.steps_base import Step, StepKind, Output
+from scripts.bootstrap_kind_cluster.check_result import CheckPassed, CheckFailed, CheckResult
 from scripts.common.kubectl import create_namespace
 import scripts.common.helm as helm_module
+import scripts.common.kind as kind_module
+from scripts.kind_cluster.index import KIND_CLUSTER_NAME
 
 
 def deploy_grafana_dashboard(namespace="grafana-dashboard", secret_timeout=120) -> tuple[bool, list[Output]]:
@@ -137,10 +140,27 @@ def shutdown_grafana_dashboard(namespace="grafana-dashboard") -> bool:
     return True
 
 
+def check_deploy_grafana_dashboard(cluster_name: str = KIND_CLUSTER_NAME, **kwargs) -> CheckResult:
+    if not kind_module.set_kubectl_context_for_kind_cluster(cluster_name, verbosity=0):
+        return CheckFailed(errors=[f"Failed to set kubectl context for Kind cluster '{cluster_name}'"])
+    try:
+        result = subprocess.run(
+            ["kubectl", "get", "deployment", "main-line-grafana-dashboard", "-n", "grafana-dashboard"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        if result.returncode == 0:
+            return CheckPassed()
+        return CheckFailed(errors=["Deployment 'main-line-grafana-dashboard' not found in namespace 'grafana-dashboard'"])
+    except FileNotFoundError:
+        return CheckFailed(errors=["kubectl not found"])
+
+
 DEPLOY_GRAFANA_DASHBOARD = Step(
     name="deploy_grafana_dashboard",
     description="Deploys a pre-configured Grafana dashboard for Main-Line telemetry",
     perform=lambda **kwargs: deploy_grafana_dashboard(),
+    check=lambda **kwargs: check_deploy_grafana_dashboard(**kwargs),
     rollback=None,
     step_kind=StepKind.Required(),
     perform_flag="deploy_grafana_dashboard_only",

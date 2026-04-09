@@ -1,4 +1,5 @@
 from scripts.bootstrap_kind_cluster.steps_base import Step, Output
+from scripts.bootstrap_kind_cluster.check_result import CheckPassed, CheckFailed, CheckResult
 from scripts.kind_cluster.index import KIND_CLUSTER_NAME
 import scripts.common.kind as kind_module
 import subprocess
@@ -136,10 +137,29 @@ def create_kubernetes_dashboard_httproute(cluster_name: str = KIND_CLUSTER_NAME)
         print(f"✗ Failed to create Kubernetes Dashboard HTTPRoute: {e}")
         return False, []
 
+def check_kubernetes_dashboard_httproute_created(cluster_name: str = KIND_CLUSTER_NAME, **kwargs) -> CheckResult:
+    """Check that the 'kubernetes-dashboard' HTTPRoute exists in the kubernetes-dashboard namespace."""
+    if not kind_module.set_kubectl_context_for_kind_cluster(cluster_name, verbosity=0):
+        return CheckFailed(errors=[f"Could not set kubectl context for cluster '{cluster_name}'"])
+    try:
+        result = subprocess.run(
+            ["kubectl", "get", "httproute", "kubernetes-dashboard",
+             "--namespace", "kubernetes-dashboard"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        if result.returncode == 0:
+            return CheckPassed()
+        return CheckFailed(errors=["HTTPRoute 'kubernetes-dashboard' not found in namespace 'kubernetes-dashboard'"])
+    except FileNotFoundError:
+        return CheckFailed(errors=["kubectl not found"])
+
+
 CREATE_KUBERNETES_DASHBOARD_HTTPROUTE = Step(
     name="create_kubernetes_dashboard_httproute",
     description="Creates the HTTPRoute for the Kubernetes Dashboard",
     perform=lambda **kwargs: create_kubernetes_dashboard_httproute(**kwargs),
+    check=lambda **kwargs: check_kubernetes_dashboard_httproute_created(**kwargs),
     rollback=None,
     args={'cluster_name': KIND_CLUSTER_NAME},
     perform_flag="create_kubernetes_dashboard_httproute_only",

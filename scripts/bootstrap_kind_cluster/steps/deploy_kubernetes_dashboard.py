@@ -33,7 +33,7 @@ def check_kubernetes_dashboard_deployed(cluster_name: str = KIND_CLUSTER_NAME, *
         return CheckFailed(errors=[f"Could not set kubectl context for cluster '{cluster_name}'"])
     try:
         result = subprocess.run(
-            ["kubectl", "get", "deployment", "kubernetes-dashboard-api",
+            ["kubectl", "get", "deployment", "headlamp-kubernetes-dashboard",
              "--namespace", "kubernetes-dashboard"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

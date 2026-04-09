@@ -49,11 +49,25 @@ def add_kubernetes_dashboard_helm_repo() -> bool:
         
         if result.returncode == 0:
             print("✓ Successfully added Kubernetes Dashboard Helm repository")
-            return True
         else:
             print("✗ Failed to add Kubernetes Dashboard Helm repository")
             print(result.stderr)
             return False
+
+        result = subprocess.run(
+            ["helm", "repo", "update", "headlamp"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding='utf-8'
+        )
+        if result.returncode != 0:
+            print("✗ Failed to update Kubernetes Dashboard Helm repository")
+            print(result.stderr)
+            return False
+
+        print("✓ Successfully updated Kubernetes Dashboard Helm repository")
+        return True
     except Exception as e:
         print(f"✗ Failed to add Helm repository: {e}")
         return False
@@ -168,11 +182,25 @@ def add_grafana_helm_repo() -> bool:
         
         if result.returncode == 0:
             print("✓ Successfully added Grafana Helm repository")
-            return True
         else:
             print("✗ Failed to add Grafana Helm repository")
             print(result.stderr)
             return False
+
+        result = subprocess.run(
+            ["helm", "repo", "update", "grafana"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding='utf-8'
+        )
+        if result.returncode != 0:
+            print("✗ Failed to update Grafana Helm repository")
+            print(result.stderr)
+            return False
+
+        print("✓ Successfully updated Grafana Helm repository")
+        return True
     except Exception as e:
         print(f"✗ Failed to add Helm repository: {e}")
         return False
@@ -247,11 +275,25 @@ def add_opentelemetry_helm_repo() -> bool:
         
         if result.returncode == 0:
             print("✓ Successfully added OpenTelemetry Helm repository")
-            return True
         else:
             print("✗ Failed to add OpenTelemetry Helm repository")
             print(result.stderr)
             return False
+
+        result = subprocess.run(
+            ["helm", "repo", "update", "open-telemetry"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding='utf-8'
+        )
+        if result.returncode != 0:
+            print("✗ Failed to update OpenTelemetry Helm repository")
+            print(result.stderr)
+            return False
+
+        print("✓ Successfully updated OpenTelemetry Helm repository")
+        return True
     except Exception as e:
         print(f"✗ Failed to add Helm repository: {e}")
         return False

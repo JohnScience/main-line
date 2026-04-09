@@ -1,9 +1,24 @@
 from scripts.bootstrap_kind_cluster.steps_base import Step, StepKind
+from scripts.bootstrap_kind_cluster.check_result import CheckPassed, CheckFailed, CheckResult
 from scripts.common.kubectl import create_namespace
 from pathlib import Path
 import subprocess
 
 project_root = Path(__file__).parent.parent.parent.parent
+
+def check_alloy_config_deployed(namespace: str = "grafana-alloy", **kwargs) -> CheckResult:
+    """Check that the alloy-config ConfigMap exists in the grafana-alloy namespace."""
+    try:
+        result = subprocess.run(
+            ["kubectl", "get", "configmap", "alloy-config", "--namespace", namespace],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        if result.returncode == 0:
+            return CheckPassed()
+        return CheckFailed(errors=[f"ConfigMap 'alloy-config' not found in namespace '{namespace}'"])
+    except FileNotFoundError:
+        return CheckFailed(errors=["kubectl not found"])
 
 def deploy_alloy_config(namespace="grafana-alloy") -> bool:
     print(f"Creating namespace '{namespace}' for Grafana Alloy...")
@@ -37,6 +52,7 @@ DEPLOY_ALLOY_CONFIG = Step(
     name="deploy_alloy_config",
     description="Deploys a ConfigMap for Grafana Alloy in Kind cluster",
     perform=lambda **kwargs: deploy_alloy_config(),
+    check=lambda **kwargs: check_alloy_config_deployed(),
     rollback=None,
     step_kind=StepKind.Required(),
     perform_flag="deploy_alloy_config_only",

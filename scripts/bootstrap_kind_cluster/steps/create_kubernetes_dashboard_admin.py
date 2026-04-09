@@ -1,4 +1,5 @@
 from scripts.bootstrap_kind_cluster.steps_base import Step, Output
+from scripts.bootstrap_kind_cluster.check_result import CheckPassed, CheckFailed, CheckResult
 from scripts.kind_cluster.index import KIND_CLUSTER_NAME
 import scripts.common.kind as kind_module
 import subprocess
@@ -72,10 +73,29 @@ def create_kubernetes_dashboard_admin(cluster_name: str = KIND_CLUSTER_NAME) -> 
         print(f"✗ Failed to create ClusterRoleBinding for admin user: {e}")
         return False
 
+def check_kubernetes_dashboard_admin_created(cluster_name: str = KIND_CLUSTER_NAME, **kwargs) -> CheckResult:
+    """Check that the kubernetes-dashboard-admin ServiceAccount exists."""
+    if not kind_module.set_kubectl_context_for_kind_cluster(cluster_name, verbosity=0):
+        return CheckFailed(errors=[f"Could not set kubectl context for cluster '{cluster_name}'"])
+    try:
+        result = subprocess.run(
+            ["kubectl", "get", "serviceaccount", "kubernetes-dashboard-admin",
+             "--namespace", "kubernetes-dashboard"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        if result.returncode == 0:
+            return CheckPassed()
+        return CheckFailed(errors=["ServiceAccount 'kubernetes-dashboard-admin' not found in namespace 'kubernetes-dashboard'"])
+    except FileNotFoundError:
+        return CheckFailed(errors=["kubectl not found"])
+
+
 CREATE_KUBERNETES_DASHBOARD_ADMIN = Step(
     name="create_kubernetes_dashboard_admin",
     description="Creates the service account and cluster role binding for the Kubernetes Dashboard admin user",
     perform=lambda **kwargs: create_kubernetes_dashboard_admin(**kwargs),
+    check=lambda **kwargs: check_kubernetes_dashboard_admin_created(**kwargs),
     rollback=None,
     args={'cluster_name': KIND_CLUSTER_NAME},
     perform_flag='create_dashboard_admin_only',
