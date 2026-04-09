@@ -38,11 +38,8 @@ spec:
       debug: {}
       otlp:
         endpoint: grafana-alloy:4317
-        protocols:
-          grpc: {}
-      tls:
-        insecure: true # Set to false and configure certs for production
-      # authentication, headers, or other options can be added here if needed
+        tls:
+          insecure: true
     service:
       pipelines:
         traces:
@@ -56,4 +53,4 @@ spec:
         logs:
           receivers: [otlp]
           processors: [memory_limiter, batch]
-          exporters: [debug, loki, alloy]
+          exporters: [debug, otlp]
