@@ -298,6 +298,93 @@ def add_opentelemetry_helm_repo() -> bool:
         print(f"✗ Failed to add Helm repository: {e}")
         return False
 
+def add_prometheus_community_helm_repo() -> bool:
+    """
+    Adds the Prometheus Community Helm repository.
+    
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    print("\nAdding Prometheus Community Helm repository...")
+    
+    # Check if helm is installed
+    if not is_helm_installed():
+        print("✗ 'helm' is not installed or not in PATH")
+        return False
+    
+    try:
+        result = subprocess.run(
+            ["helm", "repo", "add", "prometheus-community", "https://prometheus-community.github.io/helm-charts"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding='utf-8'
+        )
+        
+        if result.returncode == 0:
+            print("✓ Successfully added Prometheus Community Helm repository")
+        else:
+            print("✗ Failed to add Prometheus Community Helm repository")
+            print(result.stderr)
+            return False
+
+        result = subprocess.run(
+            ["helm", "repo", "update", "prometheus-community"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding='utf-8'
+        )
+        if result.returncode != 0:
+            print("✗ Failed to update Prometheus Community Helm repository")
+            print(result.stderr)
+            return False
+
+        print("✓ Successfully updated Prometheus Community Helm repository")
+        return True
+    except Exception as e:
+        print(f"✗ Failed to add Helm repository: {e}")
+        return False
+
+def deploy_prometheus_via_helm(namespace: str = "prometheus") -> bool:
+    """
+    Deploys Prometheus using the prometheus-community Helm chart.
+
+    Args:
+        namespace: Kubernetes namespace to deploy Prometheus into
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    print(f"\nDeploying Prometheus in namespace '{namespace}' via Helm...")
+
+    if not is_helm_installed():
+        print("✗ 'helm' is not installed or not in PATH")
+        return False
+
+    try:
+        result = subprocess.run(
+            [
+                "helm", "upgrade", "--install", "prometheus", "prometheus-community/prometheus",
+                "--namespace", namespace,
+                "--create-namespace",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding='utf-8'
+        )
+
+        if result.returncode == 0:
+            print("✓ Successfully deployed Prometheus via Helm")
+            return True
+        else:
+            print("✗ Failed to deploy Prometheus via Helm")
+            print(result.stderr)
+            return False
+    except Exception as e:
+        print(f"✗ Failed to deploy Prometheus: {e}")
+        return False
+
 def deploy_cert_manager_via_helm(namespace: str = "cert-manager") -> bool:
     """
     Deploys Cert-Manager using Helm.
@@ -417,6 +504,7 @@ def deploy_alloy_via_helm(namespace: str = "grafana-alloy") -> bool:
 def deploy_grafana_dashboard_via_helm(
     namespace: str,
     logical_chart_name: str = "main-line-grafana-dashboard",
+    root_url: str | None = None,
 ) -> bool:
     """
     Deploys a Grafana dashboard using the Grafana Helm chart and a custom values.yaml manifest.
@@ -424,6 +512,7 @@ def deploy_grafana_dashboard_via_helm(
     Args:
         namespace: The Kubernetes namespace to deploy the dashboard into.
         logical_chart_name: The Helm release name for the dashboard deployment (default: 'main-line-grafana-dashboard').
+        root_url: Optional Grafana root_url (GF_SERVER_ROOT_URL). Should match the external URL used to access Grafana.
 
     Returns:
         bool: True if deployment was successful, False otherwise.
@@ -439,13 +528,17 @@ def deploy_grafana_dashboard_via_helm(
 
     # helm upgrade --install <logical-chart-name> grafana/grafana --namespace <namespace> -f <manifest>
 
+    cmd = [
+        "helm", "upgrade", "--install", logical_chart_name, "grafana/grafana",
+        "--namespace", namespace,
+        "-f", str(manifest),
+    ]
+    if root_url:
+        cmd += ["--set", f"grafana\\.ini.server.root_url={root_url}"]
+
     try:
         result = subprocess.run(
-            [
-                "helm", "upgrade", "--install", logical_chart_name, "grafana/grafana",
-                "--namespace", namespace,
-                "-f", str(manifest)
-            ],
+            cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,

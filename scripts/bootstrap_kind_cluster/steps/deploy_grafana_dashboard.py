@@ -1,13 +1,38 @@
 import subprocess
 import base64
+import ipaddress
 import time
 
 from scripts.bootstrap_kind_cluster.steps_base import Step, StepKind, Output
-from scripts.bootstrap_kind_cluster.check_result import CheckPassed, CheckFailed, CheckResult
+from scripts.common.check_result import CheckPassed, CheckFailed, CheckResult
 from scripts.common.kubectl import create_namespace
 import scripts.common.helm as helm_module
 import scripts.common.kind as kind_module
 from scripts.kind_cluster.index import KIND_CLUSTER_NAME
+
+GRAFANA_DIRECT_PORT = 8003
+
+
+def _get_gateway_ip() -> str | None:
+    """
+    Returns the MetalLB LoadBalancer IP that will be assigned to the gateway.
+    Uses the same calculation as install_metallb: last /24 of the kind network + .200.
+    """
+    try:
+        result = subprocess.run(
+            ["docker", "network", "inspect", "kind", "-f", "{{(index .IPAM.Config 0).Subnet}}"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+        )
+        subnet = result.stdout.strip()
+        network = ipaddress.IPv4Network(subnet)
+        return str(network.network_address + (255 << 8) + 200)
+    except Exception as e:
+        print(f"⚠ Could not determine gateway IP from kind network: {e}")
+        return None
 
 
 def deploy_grafana_dashboard(namespace="grafana-dashboard", secret_timeout=120) -> tuple[bool, list[Output]]:
@@ -25,7 +50,15 @@ def deploy_grafana_dashboard(namespace="grafana-dashboard", secret_timeout=120) 
     print(f"Deploying Grafana Dashboard in namespace '{namespace}'...")
     create_namespace(namespace)
     logical_chart_name = "main-line-grafana-dashboard"
-    if not helm_module.deploy_grafana_dashboard_via_helm(namespace=namespace, logical_chart_name=logical_chart_name):
+
+    gateway_ip = _get_gateway_ip()
+    root_url = f"http://{gateway_ip}:{GRAFANA_DIRECT_PORT}" if gateway_ip else None
+    if root_url:
+        print(f"  Setting Grafana root_url to: {root_url}")
+    else:
+        print("⚠ Could not determine gateway IP; Grafana root_url will not be set (login may fail)")
+
+    if not helm_module.deploy_grafana_dashboard_via_helm(namespace=namespace, logical_chart_name=logical_chart_name, root_url=root_url):
         print(f"✗ Failed to deploy Grafana Dashboard via Helm in namespace '{namespace}'")
         return False, []
     print(f"✓ Successfully deployed Grafana Dashboard in namespace '{namespace}'")

@@ -13,7 +13,7 @@ from scripts.common.docker_images import (
     PurposeSpecificDataVariant,
 )
 from scripts.bootstrap_kind_cluster.steps_base import Step, StepKind, CliArg
-from scripts.bootstrap_kind_cluster.check_result import CheckPassed, CheckFailed, CheckResult
+from scripts.common.check_result import CheckPassed, CheckFailed, CheckResult
 
 def check_images_pushed(registry_host: str = 'localhost', registry_port: int = 5000, **kwargs) -> CheckResult:
     """Check that all non-intermediate images exist in the registry."""

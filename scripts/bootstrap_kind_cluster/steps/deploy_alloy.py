@@ -1,6 +1,6 @@
 import subprocess
 from scripts.bootstrap_kind_cluster.steps_base import Step, StepKind
-from scripts.bootstrap_kind_cluster.check_result import CheckPassed, CheckFailed, CheckResult
+from scripts.common.check_result import CheckPassed, CheckFailed, CheckResult
 import scripts.common.helm as helm_module
 import scripts.common.kind as kind_module
 from scripts.kind_cluster.index import KIND_CLUSTER_NAME

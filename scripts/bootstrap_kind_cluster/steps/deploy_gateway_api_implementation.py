@@ -3,7 +3,7 @@ from scripts.kind_cluster.index import KIND_CLUSTER_NAME
 import scripts.common.kind as kind_module
 import scripts.common.helm as helm_module
 from scripts.bootstrap_kind_cluster.steps_base import Step, StepKind
-from scripts.bootstrap_kind_cluster.check_result import CheckPassed, CheckFailed, CheckResult
+from scripts.common.check_result import CheckPassed, CheckFailed, CheckResult
 
 def deploy_envoy_gateway_in_kind_cluster(
         cluster_name: str = KIND_CLUSTER_NAME,

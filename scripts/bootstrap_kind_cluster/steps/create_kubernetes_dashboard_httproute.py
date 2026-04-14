@@ -1,5 +1,5 @@
 from scripts.bootstrap_kind_cluster.steps_base import Step, Output
-from scripts.bootstrap_kind_cluster.check_result import CheckPassed, CheckFailed, CheckResult
+from scripts.common.check_result import CheckPassed, CheckFailed, CheckResult
 from scripts.kind_cluster.index import KIND_CLUSTER_NAME
 import scripts.common.kind as kind_module
 import subprocess

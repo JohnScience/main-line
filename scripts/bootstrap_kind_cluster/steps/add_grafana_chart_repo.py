@@ -1,6 +1,6 @@
 import subprocess
 from scripts.bootstrap_kind_cluster.steps_base import Step, StepKind
-from scripts.bootstrap_kind_cluster.check_result import CheckPassed, CheckFailed, CheckResult
+from scripts.common.check_result import CheckPassed, CheckFailed, CheckResult
 import scripts.common.helm as helm_module
 
 def check_grafana_chart_repo_added() -> CheckResult:

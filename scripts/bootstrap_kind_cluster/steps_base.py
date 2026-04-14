@@ -10,7 +10,7 @@ This module contains the core classes for defining and executing setup steps:
 from dataclasses import dataclass
 from typing import Callable
 
-from scripts.bootstrap_kind_cluster.check_result import CheckResult
+from scripts.common.check_result import CheckResult
 
 
 @dataclass

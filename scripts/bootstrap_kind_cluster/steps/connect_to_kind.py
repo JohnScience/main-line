@@ -7,7 +7,7 @@ from scripts.common.docker import (
 )
 
 from scripts.bootstrap_kind_cluster.steps_base import Step, StepKind
-from scripts.bootstrap_kind_cluster.check_result import CheckPassed, CheckFailed
+from scripts.common.check_result import CheckPassed, CheckFailed
 from scripts.kind_cluster.index import KIND_CLUSTER_NAME
 
 def connect_registry_to_kind_network(registry_name: str = "main-line-registry", cluster_name: str = "kind") -> bool:

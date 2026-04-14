@@ -14,6 +14,7 @@ from scripts.bootstrap_kind_cluster.args_handling import Cleanup, PerformChecks,
 
 from scripts.bootstrap_kind_cluster.steps.add_grafana_chart_repo import ADD_GRAFANA_CHART_REPO
 from scripts.bootstrap_kind_cluster.steps.add_opentelemetry_chart_repo import ADD_OPENTELEMETRY_CHART_REPO
+from scripts.bootstrap_kind_cluster.steps.add_prometheus_community_chart_repo import ADD_PROMETHEUS_COMMUNITY_CHART_REPO
 from scripts.bootstrap_kind_cluster.steps.build_and_push_images import BUILD_AND_PUSH_IMAGES, cleanup_images
 from scripts.bootstrap_kind_cluster.steps.connect_to_kind import CONNECT_TO_KIND
 from scripts.bootstrap_kind_cluster.steps.create_gateway import CREATE_GATEWAY
@@ -24,6 +25,7 @@ from scripts.bootstrap_kind_cluster.steps.deploy_alloy import DEPLOY_ALLOY
 from scripts.bootstrap_kind_cluster.steps.deploy_alloy_config import DEPLOY_ALLOY_CONFIG
 from scripts.bootstrap_kind_cluster.steps.deploy_cert_manager import DEPLOY_CERT_MANAGER
 from scripts.bootstrap_kind_cluster.steps.deploy_gateway_api_implementation import DEPLOY_GATEWAY_API_IMPLEMENTATION
+from scripts.bootstrap_kind_cluster.steps.deploy_prometheus import DEPLOY_PROMETHEUS
 from scripts.bootstrap_kind_cluster.steps.deploy_grafana_dashboard import DEPLOY_GRAFANA_DASHBOARD
 from scripts.bootstrap_kind_cluster.steps.deploy_grafana_dashboard_direct_httproute import DEPLOY_GRAFANA_DASHBOARD_DIRECT_HTTPROUTE
 from scripts.bootstrap_kind_cluster.steps.deploy_kubernetes_dashboard import DEPLOY_KUBERNETES_DASHBOARD
@@ -90,6 +92,8 @@ ALL_STEPS = [
     CREATE_KUBERNETES_DASHBOARD_ADMIN,
     CREATE_KUBERNETES_DASHBOARD_HTTPROUTE,
     ADD_GRAFANA_CHART_REPO,
+    ADD_PROMETHEUS_COMMUNITY_CHART_REPO,
+    DEPLOY_PROMETHEUS,
     DEPLOY_LOKI,
     DEPLOY_ALLOY_CONFIG,
     DEPLOY_ALLOY,
@@ -237,7 +241,7 @@ def main():
         return 0 if cleanup_all(registry_port=handling.registry_port) else 1
 
     if isinstance(handling, PerformChecks):
-        from scripts.bootstrap_kind_cluster.check_result import CheckPassed
+        from scripts.common.check_result import CheckPassed
         print("=== Running Checks ===")
         all_passed = True
         for step in handling.steps:

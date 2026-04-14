@@ -1,6 +1,6 @@
 import subprocess
 from scripts.bootstrap_kind_cluster.steps_base import Step, StepKind, CliArg, Output
-from scripts.bootstrap_kind_cluster.check_result import CheckPassed, CheckFailed
+from scripts.common.check_result import CheckPassed, CheckFailed
 from scripts.common.docker import (
     container_exists,
     docker_image_exists,

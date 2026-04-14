@@ -1,5 +1,5 @@
 from scripts.bootstrap_kind_cluster.steps_base import Step, StepKind
-from scripts.bootstrap_kind_cluster.check_result import CheckPassed, CheckFailed, CheckResult
+from scripts.common.check_result import CheckPassed, CheckFailed, CheckResult
 from scripts.common.kubectl import create_namespace
 from pathlib import Path
 import subprocess

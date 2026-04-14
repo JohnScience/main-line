@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from scripts.bootstrap_kind_cluster.steps_base import Step, StepKind
-from scripts.bootstrap_kind_cluster.check_result import CheckPassed, CheckFailed
+from scripts.common.check_result import CheckPassed, CheckFailed
 from scripts.common.git import get_git_root
 from scripts.common import kind as kind_module
 from scripts.common.kind import kind_cluster_exists
