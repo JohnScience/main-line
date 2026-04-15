@@ -12,18 +12,26 @@ loki.write "final" {
     }
 }
 
+prometheus.remote_write "prometheus" {
+    endpoint {
+        url = "http://prometheus-server.prometheus.svc.cluster.local/api/v1/write"
+    }
+}
+
 otelcol.receiver.otlp "default" {
     http {}
     grpc {}
 
     output {
         logs    = [otelcol.processor.batch.default.input]
+        metrics = [otelcol.processor.batch.default.input]
     }
 }
 
 otelcol.processor.batch "default" {
     output {
-        logs = [otelcol.exporter.otlphttp.default.input]
+        logs    = [otelcol.exporter.otlphttp.default.input]
+        metrics = [otelcol.exporter.prometheus.default.input]
     }
 }
 
@@ -34,4 +42,8 @@ otelcol.exporter.otlphttp "default" {
       "X-Scope-OrgID" = "fake",
     }
   }
+}
+
+otelcol.exporter.prometheus "default" {
+  forward_to = [prometheus.remote_write.prometheus.receiver]
 }

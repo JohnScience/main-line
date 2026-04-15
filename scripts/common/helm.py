@@ -361,12 +361,16 @@ def deploy_prometheus_via_helm(namespace: str = "prometheus") -> bool:
         print("✗ 'helm' is not installed or not in PATH")
         return False
 
+    git_root = git.get_git_root()
+    values_file_path = Path(git_root) / "k8s" / "prometheus" / "values.yaml"
+
     try:
         result = subprocess.run(
             [
                 "helm", "upgrade", "--install", "prometheus", "prometheus-community/prometheus",
                 "--namespace", namespace,
                 "--create-namespace",
+                "--values", str(values_file_path),
             ],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

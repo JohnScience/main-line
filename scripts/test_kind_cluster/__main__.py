@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from scripts.common.check_result import CheckFailed, CheckPassed, CheckResult
-from scripts.test_kind_cluster.general_tests import check_otlp_logs_received_by_loki, check_all_namespaces_exist, check_all_services_exist
+from scripts.test_kind_cluster.general_tests import check_otlp_logs_received_by_loki, check_all_namespaces_exist, check_all_services_exist, check_otlp_metrics_received_by_prometheus
 
 
 @dataclass
@@ -37,6 +37,11 @@ GENERAL_TESTS: list[Test] = [
         name="otlp_logs_received_by_loki",
         description="Sends an OTLP log entry to the OTel Collector and verifies it is queryable in Loki.",
         test_func=check_otlp_logs_received_by_loki,
+    ),
+    Test(
+        name="otlp_metrics_received_by_prometheus",
+        description="Sends an OTLP metric to the OTel Collector and verifies it is queryable in Prometheus.",
+        test_func=check_otlp_metrics_received_by_prometheus,
     ),
 ]
 

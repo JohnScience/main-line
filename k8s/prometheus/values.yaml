@@ -1,0 +1,4 @@
+server:
+  extraArgs:
+    # Allow Alloy (and other OTel exporters) to push metrics via remote_write.
+    web.enable-remote-write-receiver: ""

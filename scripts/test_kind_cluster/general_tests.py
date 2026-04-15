@@ -31,6 +31,8 @@ _OTEL_COLLECTOR_HTTP_PORT = _get_otel_collector_port("otlp-http")
 
 # Port 80 is the loki-gateway Helm chart default; it is not declared in k8s/loki/values.yaml.
 _LOKI_GATEWAY_PORT = 80
+# Port 80 is the prometheus-server Helm chart default.
+_PROMETHEUS_SERVER_PORT = 80
 _LOKI_TENANT_ID = "fake"
 
 _TEST_SERVICE_NAME = "main-line-general-test"
@@ -189,6 +191,103 @@ def check_all_namespaces_exist(cluster_name: str = KIND_CLUSTER_NAME, **kwargs) 
     if errors:
         return CheckFailed(errors=errors)
     return CheckPassed()
+
+
+def _send_otlp_metric(local_port: int, metric_name: str) -> bool:
+    payload = {
+        "resourceMetrics": [
+            {
+                "resource": {
+                    "attributes": [
+                        {"key": "service.name", "value": {"stringValue": _TEST_SERVICE_NAME}}
+                    ]
+                },
+                "scopeMetrics": [
+                    {
+                        "metrics": [
+                            {
+                                "name": metric_name,
+                                "gauge": {
+                                    "dataPoints": [
+                                        {
+                                            "timeUnixNano": str(int(time.time() * 1e9)),
+                                            "asDouble": 1.0,
+                                        }
+                                    ]
+                                },
+                            }
+                        ]
+                    }
+                ],
+            }
+        ]
+    }
+    try:
+        conn = http.client.HTTPConnection("127.0.0.1", local_port, timeout=10)
+        conn.request(
+            "POST",
+            "/v1/metrics",
+            json.dumps(payload).encode(),
+            {"Content-Type": "application/json"},
+        )
+        resp = conn.getresponse()
+        resp.read()
+        return resp.status in (200, 204)
+    except Exception:
+        return False
+
+
+def _prometheus_has_metric(local_port: int, metric_name: str) -> bool:
+    # Prometheus normalises metric names: dots and hyphens become underscores.
+    safe_name = metric_name.replace(".", "_").replace("-", "_")
+    params = urllib.parse.urlencode({"query": safe_name})
+    try:
+        conn = http.client.HTTPConnection("127.0.0.1", local_port, timeout=10)
+        conn.request("GET", f"/api/v1/query?{params}")
+        resp = conn.getresponse()
+        body = resp.read()
+        if resp.status != 200:
+            return False
+        data = json.loads(body)
+        return len(data.get("data", {}).get("result", [])) > 0
+    except Exception:
+        return False
+
+
+def check_otlp_metrics_received_by_prometheus(cluster_name: str = KIND_CLUSTER_NAME, **kwargs) -> CheckResult:
+    if not kind_module.set_kubectl_context_for_kind_cluster(cluster_name, verbosity=0):
+        return CheckFailed(errors=[f"Could not set kubectl context for cluster '{cluster_name}'"])
+
+    # Unique metric name so we don't match stale data.
+    metric_name = f"main_line_test_{uuid.uuid4().hex}"
+    otel_local_port = 14318
+    prom_local_port = 19090
+
+    otel_pf = _port_forward(UserDefinedNamespaces.OPENTELEMETRY_COLLECTOR, KnownServices.OTEL_COLLECTOR_COLLECTOR, otel_local_port, _OTEL_COLLECTOR_HTTP_PORT)
+    prom_pf = _port_forward(UserDefinedNamespaces.PROMETHEUS, KnownServices.PROMETHEUS_SERVER, prom_local_port, _PROMETHEUS_SERVER_PORT)
+    try:
+        if not _wait_for_port(otel_local_port):
+            return CheckFailed(errors=["Timed out waiting for OTel Collector port-forward"])
+        if not _wait_for_port(prom_local_port):
+            return CheckFailed(errors=["Timed out waiting for Prometheus port-forward"])
+
+        if not _send_otlp_metric(otel_local_port, metric_name):
+            return CheckFailed(errors=["Failed to POST OTLP metric to OTel Collector"])
+
+        # OTel Collector batch timeout is 10 s; Alloy also batches.
+        # Poll for up to 60 seconds.
+        deadline = time.time() + 60
+        while time.time() < deadline:
+            if _prometheus_has_metric(prom_local_port, metric_name):
+                return CheckPassed()
+            time.sleep(3)
+
+        return CheckFailed(errors=[
+            f"OTLP metric '{metric_name}' was not found in Prometheus within 60 seconds"
+        ])
+    finally:
+        otel_pf.terminate()
+        prom_pf.terminate()
 
 
 def check_all_services_exist(cluster_name: str = KIND_CLUSTER_NAME, **kwargs) -> CheckResult:
