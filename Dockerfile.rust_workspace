@@ -16,6 +16,7 @@ FROM chef AS planner
 
 # Create directories to hold dummy files
 RUN mkdir -p ./rust/backend/src
+RUN mkdir -p ./rust/backend_old/src
 RUN mkdir -p ./rust/backend_lib/src
 RUN mkdir -p ./rust/browser_supported_img_format/src
 RUN mkdir -p ./rust/export_shared_types/src
@@ -29,6 +30,7 @@ RUN mkdir -p ./rust/shared_items_lib/src
 
 # Create dummy lib.rs and main.rs files
 RUN touch ./rust/backend/src/main.rs
+RUN touch ./rust/backend_old/src/main.rs
 RUN touch ./rust/backend_lib/src/lib.rs
 RUN touch ./rust/browser_supported_img_format/src/lib.rs
 RUN touch ./rust/export_shared_types/src/main.rs
@@ -43,6 +45,7 @@ RUN touch ./rust/shared_items_lib/src/lib.rs
 # Copy only the Cargo.toml files - this allows us to cache dependencies
 COPY ./rust/Cargo.toml ./rust/Cargo.toml
 COPY ./rust/backend/Cargo.toml ./rust/backend/Cargo.toml
+COPY ./rust/backend_old/Cargo.toml ./rust/backend_old/Cargo.toml
 COPY ./rust/backend_lib/Cargo.toml ./rust/backend_lib/Cargo.toml
 COPY ./rust/browser_supported_img_format/Cargo.toml ./rust/browser_supported_img_format/Cargo.toml
 COPY ./rust/export_shared_types/Cargo.toml ./rust/export_shared_types/Cargo.toml
@@ -68,6 +71,8 @@ COPY ./rust/.cargo/ ./rust/.cargo/
 COPY ./rust/Cargo.toml ./rust/Cargo.toml
 COPY ./rust/backend/src/ ./rust/backend/src/
 COPY ./rust/backend/Cargo.toml ./rust/backend/Cargo.toml
+COPY ./rust/backend_old/src/ ./rust/backend_old/src/
+COPY ./rust/backend_old/Cargo.toml ./rust/backend_old/Cargo.toml
 COPY ./rust/backend_lib/src/ ./rust/backend_lib/src/
 COPY ./rust/backend_lib/Cargo.toml ./rust/backend_lib/Cargo.toml
 COPY ./rust/browser_supported_img_format/src/ ./rust/browser_supported_img_format/src/

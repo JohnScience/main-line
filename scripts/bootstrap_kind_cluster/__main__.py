@@ -23,6 +23,8 @@ from scripts.bootstrap_kind_cluster.steps.create_kubernetes_dashboard_admin impo
 from scripts.bootstrap_kind_cluster.steps.create_kubernetes_dashboard_httproute import CREATE_KUBERNETES_DASHBOARD_HTTPROUTE
 from scripts.bootstrap_kind_cluster.steps.deploy_alloy import DEPLOY_ALLOY
 from scripts.bootstrap_kind_cluster.steps.deploy_alloy_config import DEPLOY_ALLOY_CONFIG
+from scripts.bootstrap_kind_cluster.steps.deploy_backend import DEPLOY_BACKEND
+from scripts.bootstrap_kind_cluster.steps.deploy_backend_direct_httproute import DEPLOY_BACKEND_DIRECT_HTTPROUTE
 from scripts.bootstrap_kind_cluster.steps.deploy_cert_manager import DEPLOY_CERT_MANAGER
 from scripts.bootstrap_kind_cluster.steps.deploy_gateway_api_implementation import DEPLOY_GATEWAY_API_IMPLEMENTATION
 from scripts.bootstrap_kind_cluster.steps.deploy_prometheus import DEPLOY_PROMETHEUS
@@ -104,6 +106,8 @@ ALL_STEPS = [
     DEPLOY_GRAFANA_DASHBOARD,
     CREATE_GRAFANA_DASHBOARD_HTTPROUTE,
     DEPLOY_GRAFANA_DASHBOARD_DIRECT_HTTPROUTE,
+    DEPLOY_BACKEND,
+    DEPLOY_BACKEND_DIRECT_HTTPROUTE,
 ]
 
 def make_description():

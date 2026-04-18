@@ -91,6 +91,13 @@ DOCKER_IMAGES: list[DockerImageDesc] = [
     # This is an *application image* that is built using `main-line-backend_lib` (`Dockerfile.backend_lib`)
     # and is used to run the backend service.
     {
+        "name": "main-line-backend_old",
+        "dockerfile": "Dockerfile.backend_old",
+        "is_intermediate": False,
+        "img_dependencies": ["main-line-backend_lib"],
+        "purpose_specific_data": PurposeSpecificDataVariant.Application()
+    },
+    {
         "name": "main-line-backend",
         "dockerfile": "Dockerfile.backend",
         "is_intermediate": False,

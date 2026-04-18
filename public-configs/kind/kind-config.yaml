@@ -44,6 +44,9 @@ nodes:
       - containerPort: 8003 # Grafana direct access
         hostPort: 8003
         protocol: TCP
+      - containerPort: 8004 # Backend direct access
+        hostPort: 8004
+        protocol: TCP
   - role: worker
     image: kindest/node:v1.34.0
   - role: worker

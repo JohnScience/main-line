@@ -24,3 +24,9 @@ spec:
       allowedRoutes:
         namespaces:
           from: All
+    - name: backend-direct
+      protocol: HTTP
+      port: 8004
+      allowedRoutes:
+        namespaces:
+          from: All

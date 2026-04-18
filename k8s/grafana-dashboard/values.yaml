@@ -18,3 +18,165 @@ datasources:
           httpHeaderName1: X-Scope-OrgID
         secureJsonData:
           httpHeaderValue1: fake
+      - name: Prometheus
+        type: prometheus
+        url: http://prometheus-server.prometheus.svc.cluster.local
+        access: proxy
+
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: default
+        orgId: 1
+        folder: ""
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/default
+
+dashboards:
+  default:
+    backend-telemetry:
+      json: |
+        {
+          "title": "Backend Telemetry",
+          "uid": "backend-telemetry",
+          "schemaVersion": 38,
+          "refresh": "10s",
+          "time": { "from": "now-1h", "to": "now" },
+          "tags": ["main-line", "backend"],
+          "panels": [
+            {
+              "id": 1,
+              "type": "logs",
+              "title": "Backend Logs",
+              "datasource": "Loki",
+              "gridPos": { "h": 16, "w": 24, "x": 0, "y": 0 },
+              "options": {
+                "dedupStrategy": "none",
+                "enableLogDetails": true,
+                "showTime": true,
+                "sortOrder": "Descending",
+                "wrapLogMessage": true
+              },
+              "targets": [
+                {
+                  "refId": "A",
+                  "datasource": "Loki",
+                  "expr": "{service_name=\"backend\"}",
+                  "queryType": "range"
+                }
+              ]
+            },
+            {
+              "id": 2,
+              "type": "logs",
+              "title": "Backend Error Logs",
+              "datasource": "Loki",
+              "gridPos": { "h": 10, "w": 24, "x": 0, "y": 16 },
+              "options": {
+                "dedupStrategy": "none",
+                "enableLogDetails": true,
+                "showTime": true,
+                "sortOrder": "Descending",
+                "wrapLogMessage": true
+              },
+              "targets": [
+                {
+                  "refId": "A",
+                  "datasource": "Loki",
+                  "expr": "{service_name=\"backend\"} |= `ERROR`",
+                  "queryType": "range"
+                }
+              ]
+            }
+          ]
+        }
+    test-telemetry:
+      json: |
+        {
+          "title": "Test Telemetry",
+          "uid": "test-telemetry",
+          "schemaVersion": 38,
+          "refresh": "10s",
+          "time": { "from": "now-24h", "to": "now" },
+          "tags": ["main-line", "test"],
+          "panels": [
+            {
+              "id": 1,
+              "type": "logs",
+              "title": "Test Logs",
+              "datasource": "Loki",
+              "gridPos": { "h": 12, "w": 24, "x": 0, "y": 0 },
+              "options": {
+                "dedupStrategy": "none",
+                "enableLogDetails": true,
+                "showTime": true,
+                "sortOrder": "Descending",
+                "wrapLogMessage": true
+              },
+              "targets": [
+                {
+                  "refId": "A",
+                  "datasource": "Loki",
+                  "expr": "{service_name=\"main-line-general-test\"}",
+                  "queryType": "range"
+                }
+              ]
+            },
+            {
+              "id": 2,
+              "type": "timeseries",
+              "title": "Test Metrics",
+              "datasource": "Prometheus",
+              "gridPos": { "h": 10, "w": 24, "x": 0, "y": 12 },
+              "options": {
+                "legend": { "displayMode": "list", "placement": "bottom" },
+                "tooltip": { "mode": "multi" }
+              },
+              "fieldConfig": {
+                "defaults": { "color": { "mode": "palette-classic" } },
+                "overrides": []
+              },
+              "targets": [
+                {
+                  "refId": "A",
+                  "datasource": "Prometheus",
+                  "expr": "{job=\"main-line-general-test\"}",
+                  "legendFormat": "{{__name__}}"
+                }
+              ]
+            },
+            {
+              "id": 3,
+              "type": "stat",
+              "title": "Total Test Metric Samples",
+              "datasource": "Prometheus",
+              "gridPos": { "h": 4, "w": 8, "x": 0, "y": 22 },
+              "options": {
+                "reduceOptions": { "calcs": ["count"] },
+                "orientation": "auto",
+                "textMode": "auto",
+                "colorMode": "background"
+              },
+              "fieldConfig": {
+                "defaults": { "color": { "mode": "thresholds" },
+                  "thresholds": { "mode": "absolute", "steps": [
+                    { "color": "blue", "value": null }
+                  ]}
+                },
+                "overrides": []
+              },
+              "targets": [
+                {
+                  "refId": "A",
+                  "datasource": "Prometheus",
+                  "expr": "count({job=\"main-line-general-test\"})",
+                  "legendFormat": "Unique metrics"
+                }
+              ]
+            }
+          ]
+        }
